@@ -1,0 +1,29 @@
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "budgetapp"
+version = "0.1.0"
+description = "A personal finance and budgeting desktop application."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "PySide6>=6.8,<7",
+    "platformdirs>=4.0,<5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<10",
+]
+
+[project.scripts]
+budgetapp = "budget_app.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,41 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Local databases and financial data
+*.db
+*.sqlite
+*.sqlite3
+data/
+payslips/
+processed_payslips/
+exports/
+
+# Logs
+*.log
+
+# Packaging output
+*.spec
