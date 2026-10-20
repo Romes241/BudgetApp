@@ -181,3 +181,144 @@ def test_savings_goal_requires_positive_target(tmp_path):
                 """,
                 ("Invalid goal", 0),
             )
+            
+def create_version_one_database(database_path):
+    """Create the previous schema and populate an existing payslip."""
+
+    with connect_database(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                current_balance_pence INTEGER NOT NULL DEFAULT 0,
+                hourly_wage_pence INTEGER NOT NULL DEFAULT 0,
+                average_hours REAL NOT NULL DEFAULT 0,
+                tax_code TEXT NOT NULL DEFAULT '1257L',
+                pension_percent REAL NOT NULL DEFAULT 0,
+                student_loan_plan TEXT NOT NULL DEFAULT 'None',
+                ni_category TEXT NOT NULL DEFAULT 'A',
+                scottish_taxpayer INTEGER NOT NULL DEFAULT 1,
+                projection_months INTEGER NOT NULL DEFAULT 12
+            );
+
+            CREATE TABLE income_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pay_date TEXT NOT NULL,
+                hours_worked REAL NOT NULL DEFAULT 0,
+                gross_pay_pence INTEGER NOT NULL,
+                tax_paid_pence INTEGER NOT NULL DEFAULT 0,
+                ni_paid_pence INTEGER NOT NULL DEFAULT 0,
+                pension_paid_pence INTEGER NOT NULL DEFAULT 0,
+                net_pay_pence INTEGER NOT NULL,
+                source_file TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            PRAGMA user_version = 1;
+            """
+        )
+
+        connection.execute(
+            """
+            INSERT INTO income_history (
+                pay_date,
+                hours_worked,
+                gross_pay_pence,
+                tax_paid_pence,
+                ni_paid_pence,
+                pension_paid_pence,
+                net_pay_pence
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2026-10-19", 36, 58131, 7203, 2714, 0, 46369),
+        )
+
+
+def test_version_one_migration_preserves_income(tmp_path):
+    database_path = tmp_path / "legacy.db"
+    create_version_one_database(database_path)
+
+    with connect_database(database_path) as connection:
+        initialise_database(connection)
+
+        income = connection.execute(
+            "SELECT * FROM income_history WHERE id = 1"
+        ).fetchone()
+
+        assert income["gross_pay_pence"] == 58131
+        assert income["net_pay_pence"] == 46369
+        assert income["bonus_amount_pence"] is None
+        assert income["other_deductions_pence"] == 0
+
+
+def test_migration_creates_payment_and_bonus_tables(tmp_path):
+    database_path = tmp_path / "legacy.db"
+    create_version_one_database(database_path)
+
+    with connect_database(database_path) as connection:
+        initialise_database(connection)
+
+        tables = {
+            row["name"]
+            for row in connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                """
+            )
+        }
+
+        assert "income_payment_lines" in tables
+        assert "expected_bonuses" in tables
+
+
+def test_migration_updates_schema_version(tmp_path):
+    database_path = tmp_path / "legacy.db"
+    create_version_one_database(database_path)
+
+    with connect_database(database_path) as connection:
+        initialise_database(connection)
+
+        version = connection.execute(
+            "PRAGMA user_version"
+        ).fetchone()[0]
+
+        assert version == SCHEMA_VERSION == 2
+
+
+def test_migration_is_safe_to_repeat(tmp_path):
+    database_path = tmp_path / "legacy.db"
+    create_version_one_database(database_path)
+
+    with connect_database(database_path) as connection:
+        initialise_database(connection)
+        initialise_database(connection)
+
+        count = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM income_history
+            WHERE pay_date = '2026-10-19'
+            """
+        ).fetchone()[0]
+
+        assert count == 1
+
+
+def test_payment_line_requires_existing_income(tmp_path):
+    database_path = tmp_path / "test.db"
+
+    with connect_database(database_path) as connection:
+        initialise_database(connection)
+
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO income_payment_lines (
+                    income_id, description, amount_pence
+                )
+                VALUES (999, 'Bonus', 10000)
+                """
+            )
