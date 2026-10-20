@@ -3,6 +3,7 @@
 
 import sqlite3
 from pathlib import Path
+from contextlib import contextmanager
 
 from budget_app.paths import get_database_path
 
@@ -179,3 +180,20 @@ def initialise_database(
     connection.execute(
         f"PRAGMA user_version = {SCHEMA_VERSION}"
     )
+    
+
+@contextmanager
+def database_connection(database_path: str | Path | None = None):
+    """Manage a database connection and always close it."""
+
+    connection = connect_database(database_path)
+
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
