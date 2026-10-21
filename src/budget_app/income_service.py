@@ -16,7 +16,11 @@ MONEY_FIELDS = (
     "ni_paid",
     "pension_paid",
     "net_pay",
+    "other_deductions",
 )
+
+BONUS_MONEY_FIELD = "bonus_amount"
+_UNSET = object()
 
 
 def _validate_date(pay_date: str) -> None:
@@ -47,6 +51,7 @@ def _validate_amounts(
     ni_paid: Any,
     pension_paid: Any,
     net_pay: Any,
+    other_deductions: Any = 0,
 ) -> dict[str, int]:
     amounts = {
         "gross_pay": to_pence(gross_pay),
@@ -54,6 +59,7 @@ def _validate_amounts(
         "ni_paid": to_pence(ni_paid),
         "pension_paid": to_pence(pension_paid),
         "net_pay": to_pence(net_pay),
+        "other_deductions": to_pence(other_deductions),
     }
 
     if any(amount < 0 for amount in amounts.values()):
@@ -62,11 +68,34 @@ def _validate_amounts(
     return amounts
 
 
+def _validate_bonus_amount(bonus_amount: Any) -> int | None:
+    if bonus_amount is None:
+        return None
+
+    amount = to_pence(bonus_amount)
+    if amount < 0:
+        raise ValueError("Bonus amount cannot be negative.")
+
+    return amount
+
+
+def _validate_bonus_reason(bonus_reason: str | None) -> str | None:
+    if bonus_reason is not None and not isinstance(bonus_reason, str):
+        raise ValueError("Bonus reason must be a string or None.")
+
+    return bonus_reason
+
+
 def _record_to_dict(row: sqlite3.Row) -> dict:
     record = dict(row)
 
     for field in MONEY_FIELDS:
         record[field] = from_pence(record[f"{field}_pence"])
+
+    bonus_pence = record["bonus_amount_pence"]
+    record[BONUS_MONEY_FIELD] = (
+        from_pence(bonus_pence) if bonus_pence is not None else None
+    )
 
     return record
 
@@ -95,14 +124,24 @@ def add_income(
     pension_paid: str | int | float | Decimal,
     net_pay: str | int | float | Decimal,
     source_file: str | None = None,
+    other_deductions: str | int | float | Decimal = 0,
+    bonus_amount: str | int | float | Decimal | None = None,
+    bonus_reason: str | None = None,
 ) -> int:
     """Add an actual pay record and return its database ID."""
 
     _validate_date(pay_date)
     hours = _validate_hours(hours_worked)
     amounts = _validate_amounts(
-        gross_pay, tax_paid, ni_paid, pension_paid, net_pay
+        gross_pay,
+        tax_paid,
+        ni_paid,
+        pension_paid,
+        net_pay,
+        other_deductions,
     )
+    bonus_pence = _validate_bonus_amount(bonus_amount)
+    reason = _validate_bonus_reason(bonus_reason)
 
     with database_connection() as connection:
         cursor = connection.execute(
@@ -115,9 +154,12 @@ def add_income(
                 ni_paid_pence,
                 pension_paid_pence,
                 net_pay_pence,
-                source_file
+                source_file,
+                other_deductions_pence,
+                bonus_amount_pence,
+                bonus_reason
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 pay_date,
@@ -128,6 +170,9 @@ def add_income(
                 amounts["pension_paid"],
                 amounts["net_pay"],
                 source_file,
+                amounts["other_deductions"],
+                bonus_pence,
+                reason,
             ),
         )
         return cursor.lastrowid
@@ -143,16 +188,55 @@ def update_income(
     pension_paid: str | int | float | Decimal,
     net_pay: str | int | float | Decimal,
     source_file: str | None = None,
+    other_deductions: Any = _UNSET,
+    bonus_amount: Any = _UNSET,
+    bonus_reason: Any = _UNSET,
 ) -> bool:
-    """Update a pay record. Return False if its ID does not exist."""
+    """Update a pay record. Return False if its ID does not exist.
+
+    New optional fields are preserved when omitted. Pass None explicitly
+    for bonus_amount or bonus_reason to clear that field.
+    """
 
     _validate_date(pay_date)
     hours = _validate_hours(hours_worked)
-    amounts = _validate_amounts(
-        gross_pay, tax_paid, ni_paid, pension_paid, net_pay
-    )
 
+    # Legacy calls leave new fields unchanged rather than resetting them.
     with database_connection() as connection:
+        existing = connection.execute(
+            """
+            SELECT other_deductions_pence, bonus_amount_pence, bonus_reason
+            FROM income_history
+            WHERE id = ?
+            """,
+            (income_id,),
+        ).fetchone()
+
+        if existing is None:
+            return False
+
+        if other_deductions is _UNSET:
+            other_deductions_pence = existing["other_deductions_pence"]
+        else:
+            other_deductions_pence = _validate_amounts(
+                gross_pay, tax_paid, ni_paid, pension_paid, net_pay,
+                other_deductions,
+            )["other_deductions"]
+
+        if bonus_amount is _UNSET:
+            bonus_pence = existing["bonus_amount_pence"]
+        else:
+            bonus_pence = _validate_bonus_amount(bonus_amount)
+
+        if bonus_reason is _UNSET:
+            reason = existing["bonus_reason"]
+        else:
+            reason = _validate_bonus_reason(bonus_reason)
+
+        amounts = _validate_amounts(
+            gross_pay, tax_paid, ni_paid, pension_paid, net_pay
+        )
+
         cursor = connection.execute(
             """
             UPDATE income_history
@@ -163,7 +247,10 @@ def update_income(
                 ni_paid_pence = ?,
                 pension_paid_pence = ?,
                 net_pay_pence = ?,
-                source_file = ?
+                source_file = ?,
+                other_deductions_pence = ?,
+                bonus_amount_pence = ?,
+                bonus_reason = ?
             WHERE id = ?
             """,
             (
@@ -175,6 +262,9 @@ def update_income(
                 amounts["pension_paid"],
                 amounts["net_pay"],
                 source_file,
+                other_deductions_pence,
+                bonus_pence,
+                reason,
                 income_id,
             ),
         )
@@ -182,7 +272,7 @@ def update_income(
 
 
 def delete_income(income_id: int) -> bool:
-    """Delete a pay record. Return False if it does not exist."""
+    """Delete a pay record. Return False if its ID does not exist."""
 
     with database_connection() as connection:
         cursor = connection.execute(
