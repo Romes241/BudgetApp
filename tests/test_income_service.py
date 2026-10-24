@@ -323,3 +323,16 @@ def test_update_can_clear_bonus_details(income_database):
 
     assert record["bonus_amount"] is None
     assert record["bonus_reason"] is None
+    
+def test_update_missing_income_validates_amounts(income_database):
+    with pytest.raises(ValueError):
+        update_income(
+            999,
+            "2026-10-26",
+            38,
+            -550,
+            60,
+            22,
+            16,
+            452,
+        )

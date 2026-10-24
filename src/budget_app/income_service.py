@@ -1,4 +1,3 @@
-
 """Operations for actual income history."""
 
 import sqlite3
@@ -201,7 +200,15 @@ def update_income(
     _validate_date(pay_date)
     hours = _validate_hours(hours_worked)
 
-    # Legacy calls leave new fields unchanged rather than resetting them.
+
+    amounts = _validate_amounts(
+        gross_pay,
+        tax_paid,
+        ni_paid,
+        pension_paid,
+        net_pay,
+    )
+
     with database_connection() as connection:
         existing = connection.execute(
             """
@@ -219,7 +226,11 @@ def update_income(
             other_deductions_pence = existing["other_deductions_pence"]
         else:
             other_deductions_pence = _validate_amounts(
-                gross_pay, tax_paid, ni_paid, pension_paid, net_pay,
+                gross_pay,
+                tax_paid,
+                ni_paid,
+                pension_paid,
+                net_pay,
                 other_deductions,
             )["other_deductions"]
 
@@ -232,10 +243,6 @@ def update_income(
             reason = existing["bonus_reason"]
         else:
             reason = _validate_bonus_reason(bonus_reason)
-
-        amounts = _validate_amounts(
-            gross_pay, tax_paid, ni_paid, pension_paid, net_pay
-        )
 
         cursor = connection.execute(
             """
