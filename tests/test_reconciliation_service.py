@@ -65,6 +65,17 @@ def test_reconcile_reports_missing_breakdown(income_record):
     assert report["checks"][1]["status"] == "passed"
 
 
+def test_reconcile_reports_recorded_zero_breakdown(income_record):
+    add_payment_line(income_record, "No Earnings", "0.00")
+
+    report = reconcile_income(income_record)
+    check = report["checks"][0]
+
+    assert report["status"] == "failed"
+    assert check["status"] == "failed"
+    assert check["actual_pence"] == 0
+
+
 def test_reconcile_reports_net_pay_mismatch(tmp_path, monkeypatch):
     db_path = tmp_path / "net-mismatch.db"
     connection = database.connect_database(db_path)
