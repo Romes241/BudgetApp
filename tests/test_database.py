@@ -285,7 +285,7 @@ def test_migration_updates_schema_version(tmp_path):
             "PRAGMA user_version"
         ).fetchone()[0]
 
-        assert version == SCHEMA_VERSION == 2
+        assert version == SCHEMA_VERSION == 3
 
 
 def test_migration_is_safe_to_repeat(tmp_path):
@@ -322,3 +322,36 @@ def test_payment_line_requires_existing_income(tmp_path):
                 VALUES (999, 'Bonus', 10000)
                 """
             )
+
+def test_migration_creates_imported_payslips_table(tmp_path):
+    database_path = tmp_path / "legacy.db"
+    create_version_one_database(database_path)
+
+    with connect_database(database_path) as connection:
+        initialise_database(connection)
+
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(imported_payslips)"
+            ).fetchall()
+        }
+
+        assert {
+            "id",
+            "source_hash",
+            "source_file",
+            "income_id",
+            "imported_at",
+        }.issubset(columns)
+
+        indexes = connection.execute(
+            "PRAGMA index_list(imported_payslips)"
+        ).fetchall()
+
+        unique_indexes = [
+            index["name"]
+            for index in indexes
+            if index["unique"]
+        ]
+        assert len(unique_indexes) >= 2

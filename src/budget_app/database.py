@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from budget_app.paths import get_database_path
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 SCHEMA_SQL = """
@@ -74,6 +74,18 @@ CREATE TABLE IF NOT EXISTS income_payment_lines (
             )
         ),
     created_at TEXT NOT NULL DEFAULT (
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    ),
+    FOREIGN KEY (income_id)
+        REFERENCES income_history(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS imported_payslips (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_hash TEXT NOT NULL UNIQUE,
+    source_file TEXT NOT NULL,
+    income_id INTEGER NOT NULL UNIQUE,
+    imported_at TEXT NOT NULL DEFAULT (
         strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
     ),
     FOREIGN KEY (income_id)
@@ -264,6 +276,24 @@ def _migrate_to_v2(connection: sqlite3.Connection) -> None:
                 f"ADD COLUMN {column} {definition}"
             )
 
+def _migrate_to_v3(connection: sqlite3.Connection) -> None:
+    """Add tracking for imported payslip files."""
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS imported_payslips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_hash TEXT NOT NULL UNIQUE,
+            source_file TEXT NOT NULL,
+            income_id INTEGER NOT NULL UNIQUE,
+            imported_at TEXT NOT NULL DEFAULT (
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            ),
+            FOREIGN KEY (income_id)
+                REFERENCES income_history(id) ON DELETE CASCADE
+        )
+        """
+    )
 
 def initialise_database(
     connection: sqlite3.Connection,
@@ -290,6 +320,9 @@ def initialise_database(
 
         if current_version < 2:
             _migrate_to_v2(connection)
+
+        if current_version < 3:
+            _migrate_to_v3(connection)
 
         connection.execute(
             "INSERT OR IGNORE INTO settings (id) VALUES (1)"
