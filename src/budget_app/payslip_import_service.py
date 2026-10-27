@@ -156,13 +156,116 @@ def _classification(description: str) -> str:
     return "unknown"
 
 
+def _reconcile_inserted_income(
+    connection: sqlite3.Connection, income_id: int
+) -> dict:
+    """Build a reconciliation report for a just-inserted income row."""
+    income = connection.execute(
+        """
+        SELECT gross_pay_pence, tax_paid_pence, ni_paid_pence,
+               pension_paid_pence, other_deductions_pence, net_pay_pence
+        FROM income_history
+        WHERE id = ?
+        """,
+        (income_id,),
+    ).fetchone()
+    if income is None:
+        return {"income_id": income_id, "status": "not_found", "checks": []}
+
+    payment_lines = connection.execute(
+        """
+        SELECT amount_pence
+        FROM income_payment_lines
+        WHERE income_id = ?
+        ORDER BY id
+        """,
+        (income_id,),
+    ).fetchall()
+    gross_pence = int(income["gross_pay_pence"])
+    checks = []
+
+    if not payment_lines:
+        checks.append(
+            {
+                "name": "earnings_total",
+                "status": "missing_breakdown",
+                "expected_pence": gross_pence,
+                "actual_pence": None,
+                "difference_pence": None,
+                "message": (
+                    "No payment lines are recorded; the earnings breakdown "
+                    "cannot be reconciled."
+                ),
+            }
+        )
+    else:
+        lines_total_pence = sum(
+            int(line["amount_pence"]) for line in payment_lines
+        )
+        difference = lines_total_pence - gross_pence
+        checks.append(
+            {
+                "name": "earnings_total",
+                "status": "passed" if difference == 0 else "failed",
+                "expected_pence": gross_pence,
+                "actual_pence": lines_total_pence,
+                "difference_pence": difference,
+                "message": (
+                    "Payment lines match gross pay."
+                    if difference == 0
+                    else "Payment-line total does not match gross pay."
+                ),
+            }
+        )
+
+    deductions_pence = (
+        int(income["tax_paid_pence"])
+        + int(income["ni_paid_pence"])
+        + int(income["pension_paid_pence"])
+        + int(income["other_deductions_pence"])
+    )
+    expected_net_pence = gross_pence - deductions_pence
+    actual_net_pence = int(income["net_pay_pence"])
+    net_difference = actual_net_pence - expected_net_pence
+    checks.append(
+        {
+            "name": "net_pay",
+            "status": "passed" if net_difference == 0 else "failed",
+            "expected_pence": expected_net_pence,
+            "actual_pence": actual_net_pence,
+            "difference_pence": net_difference,
+            "message": (
+                "Net pay matches gross pay minus deductions."
+                if net_difference == 0
+                else "Net pay does not match gross pay minus deductions."
+            ),
+        }
+    )
+
+    statuses = {check["status"] for check in checks}
+    if "failed" in statuses:
+        overall_status = "failed"
+    elif "missing_breakdown" in statuses:
+        overall_status = "incomplete"
+    else:
+        overall_status = "passed"
+
+    return {
+        "income_id": income_id,
+        "status": overall_status,
+        "gross_pay_pence": gross_pence,
+        "payment_line_count": len(payment_lines),
+        "checks": checks,
+    }
+
+
 def import_payslip(
     path: str | Path,
     *,
     confirmed: bool = False,
     database_path: str | Path | None = None,
-) -> int:
-    """Import a validated payslip and return its new income ID.
+) -> dict[str, int | dict]:
+    """Import a validated payslip and return its ID with reconciliation.
 
     All inserts happen in one transaction. The caller must explicitly
     confirm the import after reviewing the preview.
@@ -282,7 +385,14 @@ def import_payslip(
                 (data.source_hash, source_file, income_id),
             )
 
-            return income_id
+            reconciliation = _reconcile_inserted_income(
+                connection, income_id
+            )
+
+            return {
+                "income_id": income_id,
+                "reconciliation": reconciliation,
+            }
 
     except sqlite3.IntegrityError as exc:
         if "source_hash" in str(exc).casefold():

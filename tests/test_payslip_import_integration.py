@@ -61,15 +61,18 @@ def table_count(database_path, table):
 def test_successful_import_creates_income_lines_and_tracking(
     database_path, extracted_data
 ):
-    income_id = import_payslip(
+    result = import_payslip(
         "sample.pdf",
         confirmed=True,
         database_path=database_path,
     )
+    income_id = result["income_id"]
 
     assert table_count(database_path, "income_history") == 1
     assert table_count(database_path, "income_payment_lines") == 1
     assert table_count(database_path, "imported_payslips") == 1
+    assert result["reconciliation"]["income_id"] == income_id
+    assert result["reconciliation"]["status"] == "passed"
 
     with connect_database(database_path) as connection:
         income = connection.execute(
