@@ -87,6 +87,27 @@ def test_validates_totals():
 
     assert result.warnings == []
 
+def test_warns_when_detailed_tax_disagrees_with_summary():
+    text = SAMPLE.replace("Tax Paid £90.04", "Tax Paid £89.04")
+    text = text.replace("Total £146.59", "Total £145.59")
+
+    result = extract_payslip_text(text)
+
+    assert "Detailed tax is £89.04, but summary tax is £90.04." in (
+        result.warnings
+    )
+
+
+def test_warns_when_detailed_total_disagrees_with_summary():
+    result = extract_payslip_text(
+        SAMPLE.replace("Total £146.59", "Total £146.58")
+    )
+
+    assert (
+        "Detailed deductions total is £146.58, but summary deductions "
+        "total is £146.59."
+    ) in result.warnings
+
 
 def test_missing_payments_section_is_flagged():
     result = extract_payslip_text("Gross Pay\n£672.59\nYTD £1,000.00")

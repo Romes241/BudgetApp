@@ -50,7 +50,14 @@ def _summary_amount(text: str, label: str) -> Decimal | None:
 
 def _extract_deductions(
     text: str,
-) -> tuple[Decimal | None, Decimal | None, list[str]]:
+) -> tuple[
+    Decimal | None,
+    Decimal | None,
+    Decimal | None,
+    Decimal | None,
+    Decimal | None,
+    list[str],
+]:
     """Extract pension and other deductions from the detailed section."""
     section = re.search(
         r"DEDUCTIONS\s*-\s*EMPLOYEE DEFAULT POST(.*?)"
@@ -60,7 +67,7 @@ def _extract_deductions(
     )
 
     if not section:
-        return None, None, [
+        return None, None, None, None, None, [
             "Could not find the detailed deductions section."
         ]
 
@@ -79,42 +86,47 @@ def _extract_deductions(
     )
 
     pension_amounts: list[Decimal] = []
+    tax_amounts: list[Decimal] = []
+    ni_amounts: list[Decimal] = []
     other_amounts: list[Decimal] = []
-    found_tax = False
-    found_ni = False
-    found_pension = False
+    deduction_total: Decimal | None = None
 
     for description, amount_text in rows:
         description = " ".join(description.split())
         normalised = description.casefold()
 
-        if not description or normalised.startswith("total"):
+        if not description:
             continue
 
         amount = _money(amount_text)
 
+        if normalised.startswith("total"):
+            deduction_total = amount
+            continue
+
         if "pension" in normalised or "nest" in normalised:
             pension_amounts.append(amount)
-            found_pension = True
         elif "tax" in normalised:
-            found_tax = True
+            tax_amounts.append(amount)
         elif (
             normalised.startswith("ni")
             or "national insurance" in normalised
         ):
-            found_ni = True
+            ni_amounts.append(amount)
         else:
             other_amounts.append(amount)
 
-    if not (found_tax and found_ni and found_pension):
-        return None, None, [
+    if not (tax_amounts and ni_amounts and pension_amounts):
+        return None, None, None, None, None, [
             "The detailed deductions section could not be fully identified."
         ]
 
+    tax = sum(tax_amounts, start=Decimal("0.00"))
+    ni = sum(ni_amounts, start=Decimal("0.00"))
     pension = sum(pension_amounts, start=Decimal("0.00"))
     other = sum(other_amounts, start=Decimal("0.00"))
 
-    return pension, other, []
+    return tax, ni, pension, other, deduction_total, []
 
 def extract_pay_date(filename: str | Path) -> str | None:
     """Extract the pay date from Payslip_PayDate_DDMMYYYY.pdf."""
@@ -138,19 +150,61 @@ def extract_pay_date(filename: str | Path) -> str | None:
 
 def extract_payslip_text(text: str) -> PayslipData:
     """Parse the known payslip text layout into structured data."""
-    pension_paid, other_deductions, deduction_warnings = (
+    detailed_tax, detailed_ni, pension_paid, other_deductions, (
+        deduction_total
+    ), deduction_warnings = (
         _extract_deductions(text)
     )
+    tax_paid = _summary_amount(text, "PAYE Tax")
+    ni_paid = _summary_amount(text, "NIC")
 
     result = PayslipData(
         gross_pay=_summary_amount(text, "Gross Pay"),
-        tax_paid=_summary_amount(text, "PAYE Tax"),
-        ni_paid=_summary_amount(text, "NIC"),
+        tax_paid=tax_paid,
+        ni_paid=ni_paid,
         pension_paid=pension_paid,
         other_deductions=other_deductions,
         net_pay=_summary_amount(text, "Net Pay"),
         warnings=deduction_warnings,
     )
+
+    if (
+        result.tax_paid is not None
+        and detailed_tax is not None
+        and detailed_tax != result.tax_paid
+    ):
+        result.warnings.append(
+            f"Detailed tax is £{detailed_tax}, but summary tax is "
+            f"£{result.tax_paid}."
+        )
+
+    if (
+        result.ni_paid is not None
+        and detailed_ni is not None
+        and detailed_ni != result.ni_paid
+    ):
+        result.warnings.append(
+            f"Detailed NI is £{detailed_ni}, but summary NI is "
+            f"£{result.ni_paid}."
+        )
+
+    deductions = (
+        result.tax_paid,
+        result.ni_paid,
+        result.pension_paid,
+        result.other_deductions,
+    )
+    if (
+        deduction_total is not None
+        and all(value is not None for value in deductions)
+        and deduction_total
+        != sum(deductions, start=Decimal("0.00"))
+    ):
+        summary_total = sum(deductions, start=Decimal("0.00"))
+        result.warnings.append(
+            f"Detailed deductions total is £{deduction_total}, "
+            f"but summary deductions total is £{summary_total}."
+        )
 
     section = re.search(
         r"PAYMENTS\s*-\s*EMPLOYEE DEFAULT POST(.*?)"
@@ -225,13 +279,6 @@ def extract_payslip_text(text: str) -> PayslipData:
             )
 
     if result.gross_pay is not None and result.net_pay is not None:
-        deductions = (
-            result.tax_paid,
-            result.ni_paid,
-            result.pension_paid,
-            result.other_deductions,
-        )
-
         if all(value is not None for value in deductions):
             expected_net = result.gross_pay - sum(
                 deductions, start=Decimal("0.00")
