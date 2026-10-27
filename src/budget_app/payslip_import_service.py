@@ -85,6 +85,13 @@ def validate_payslip(data: PayslipData) -> list[str]:
             errors.append(
                 f"Earnings line {index} has an invalid amount."
             )
+        for label, value in (("units", line.units), ("rate", line.rate)):
+            if value is not None and (
+                not value.is_finite() or value < 0
+            ):
+                errors.append(
+                    f"Earnings line {index} {label} must be finite and non-negative."
+                )
 
     if data.gross_pay is not None and data.earnings:
         line_total = sum(
