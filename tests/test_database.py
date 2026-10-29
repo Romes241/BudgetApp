@@ -285,7 +285,7 @@ def test_migration_updates_schema_version(tmp_path):
             "PRAGMA user_version"
         ).fetchone()[0]
 
-        assert version == SCHEMA_VERSION == 3
+        assert version == SCHEMA_VERSION == 4
 
 
 def test_migration_is_safe_to_repeat(tmp_path):
