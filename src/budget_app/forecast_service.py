@@ -283,8 +283,8 @@ def forecast_income_from_settings(
 ) -> dict[str, Any]:
     """Forecast dated income using settings, recent payslips and bonuses.
 
-    Historical mode averages eligible payslips dated within the 56 days
-    ending on the forecast start date, adjusting for identifiable bonus
+    Historical mode averages eligible payslips dated from 56 days before the
+    forecast start date up to and including it, adjusting for identifiable bonus
     and additional earnings. Holiday and unknown payment lines are reported
     as uncertainty rather than automatically subtracted.
 
