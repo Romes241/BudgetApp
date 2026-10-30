@@ -1,4 +1,3 @@
-
 from datetime import date, datetime
 
 import pytest
@@ -594,3 +593,123 @@ def test_settings_forecast_does_not_subtract_same_bonus_twice(
 
     assert result["regular_pay_estimate_pence"] == 24000
 
+
+def test_settings_forecast_excludes_future_dated_payslips(
+    forecast_database,
+):
+    configure_settings(forecast_database)
+
+    add_income(
+        forecast_database,
+        "2026-10-30",
+        gross_pay_pence=30000,
+        net_pay_pence=24000,
+    )
+
+    add_income(
+        forecast_database,
+        "2026-11-06",
+        gross_pay_pence=60000,
+        net_pay_pence=48000,
+    )
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 30),
+    )
+
+    assert result["historical_payslips_used"] == 1
+    assert result["regular_pay_estimate_pence"] == 24000
+
+
+def test_settings_forecast_uses_only_payslips_on_or_before_as_of_date(
+    forecast_database,
+):
+    configure_settings(forecast_database)
+
+    add_income(
+        forecast_database,
+        "2026-10-30",
+        net_pay_pence=20000,
+    )
+    add_income(
+        forecast_database,
+        "2026-11-01",
+        net_pay_pence=30000,
+    )
+    add_income(
+        forecast_database,
+        "2026-11-02",
+        net_pay_pence=50000,
+    )
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 30),
+    )
+
+    assert result["historical_payslips_used"] == 2
+    assert result["regular_pay_estimate_pence"] == 25000
+    
+def test_settings_forecast_excludes_dates_with_actual_income(
+    forecast_database,
+):
+    configure_settings(forecast_database)
+
+
+    add_income(
+        forecast_database,
+        "2026-11-13",
+        gross_pay_pence=30000,
+        net_pay_pence=24000,
+    )
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 30),
+    )
+
+    actual_dates = [
+        entry["date"]
+        for entry in result["entries"]
+        if entry["type"] == "regular_income"
+    ]
+
+    assert actual_dates == [
+        date(2026, 11, 6),
+        date(2026, 11, 20),
+        date(2026, 11, 27),
+    ]
+    assert result["regular_income_pence"] == 67500
+    assert result["forecast_diagnostics"]["recorded_pay_dates_excluded"] == 1
+
+
+def test_settings_forecast_only_excludes_exact_actual_pay_dates(
+    forecast_database,
+):
+    configure_settings(forecast_database)
+
+    add_income(
+        forecast_database,
+        "2026-11-12",
+        gross_pay_pence=30000,
+        net_pay_pence=24000,
+    )
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 20),
+    )
+
+    actual_dates = [
+        entry["date"]
+        for entry in result["entries"]
+        if entry["type"] == "regular_income"
+    ]
+
+    assert actual_dates == [
+        date(2026, 11, 6),
+        date(2026, 11, 13),
+        date(2026, 11, 20),
+    ]
+    assert result["forecast_diagnostics"]["recorded_pay_dates_excluded"] == 0

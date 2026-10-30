@@ -1,4 +1,3 @@
-
 """Income forecasting with historical pay estimates and expected bonuses.
 
 The fallback net-pay estimate uses a provisional 25% deduction from
@@ -90,8 +89,12 @@ def _scheduled_dates(
 
 def _estimate_historical_regular_net_pence(
     connection: Any,
+    as_of_date: date,
 ) -> tuple[int | None, int, dict[str, int]]:
     """Estimate regular net pay and report payment-line uncertainty.
+
+    Only payslips dated on or before as_of_date are considered. The latest
+    six eligible payslips are used.
 
     Bonus and additional lines are treated as non-recurring. Their estimated
     net contribution is removed from each payslip. The bonus field and bonus
@@ -112,10 +115,11 @@ def _estimate_historical_regular_net_pence(
             net_pay_pence,
             bonus_amount_pence
         FROM income_history
+        WHERE pay_date <= ?
         ORDER BY pay_date DESC, id DESC
         LIMIT ?
         """,
-        (HISTORICAL_PAYSLIP_LIMIT,),
+        (as_of_date.isoformat(), HISTORICAL_PAYSLIP_LIMIT),
     ).fetchall()
 
     diagnostics = {
@@ -123,6 +127,7 @@ def _estimate_historical_regular_net_pence(
         "payslips_with_holiday_pay": 0,
         "unclassified_payment_lines": 0,
         "holiday_payment_lines": 0,
+        "recorded_pay_dates_excluded": 0,
     }
 
     if not rows:
@@ -276,10 +281,15 @@ def forecast_income_from_settings(
 ) -> dict[str, Any]:
     """Forecast dated income using settings, recent payslips and bonuses.
 
-    Historical mode averages the last six recorded net payslips, adjusting
-    for identifiable bonus and additional earnings. Holiday and unknown
-    payment lines are reported as uncertainty rather than automatically
-    subtracted. Without history, income is estimated from wage and hours
+    Historical mode averages up to the latest six payslips dated on or before
+    the forecast start date, adjusting for identifiable bonus and additional
+    earnings. Holiday and unknown payment lines are reported as uncertainty
+    rather than automatically subtracted.
+
+    Actual income records already recorded for a scheduled pay date replace
+    the projected regular-income entry for that date.
+
+    Without historical payslips, income is estimated from wage and hours
     using a provisional 25% deduction.
 
     If next_pay_date is not configured, regular pay dates cannot be generated.
@@ -304,7 +314,7 @@ def forecast_income_from_settings(
             raise ValueError("Pay frequency must be weekly, fortnightly or monthly.")
 
         historical_average, payslips_used, diagnostics = (
-            _estimate_historical_regular_net_pence(connection)
+            _estimate_historical_regular_net_pence(connection, start_date)
         )
 
         if historical_average is not None:
@@ -312,11 +322,12 @@ def forecast_income_from_settings(
             gross_estimate_pence = None
             estimation_method = "historical_average"
             estimation_note = (
-                "Average of up to six recent net payslips, with estimated net "
-                "contributions from identifiable bonus and additional earnings "
-                "removed. Holiday and unclassified payment lines are not "
-                "automatically removed because their recurrence and relationship "
-                "to normal earnings are uncertain."
+                "Average of up to six recent net payslips dated on or before "
+                "the forecast start date, with estimated net contributions "
+                "from identifiable bonus and additional earnings removed. "
+                "Holiday and unclassified payment lines are not automatically "
+                "removed because their recurrence and relationship to normal "
+                "earnings are uncertain."
             )
         else:
             gross_estimate_pence, regular_net_pence = _estimate_fallback_net_pence(
@@ -351,6 +362,31 @@ def forecast_income_from_settings(
                 end_date,
                 next_pay_date,
                 frequency,
+            )
+            recorded_rows = connection.execute(
+                """
+                SELECT DISTINCT pay_date
+                FROM income_history
+                WHERE pay_date >= ?
+                  AND pay_date <= ?
+                """,
+                (start_date.isoformat(), end_date.isoformat()),
+            ).fetchall()
+
+            recorded_pay_dates = {
+                date.fromisoformat(row["pay_date"])
+                for row in recorded_rows
+            }
+
+            original_pay_date_count = len(pay_dates)
+            pay_dates = [
+                pay_date
+                for pay_date in pay_dates
+                if pay_date not in recorded_pay_dates
+            ]
+
+            diagnostics["recorded_pay_dates_excluded"] = (
+                original_pay_date_count - len(pay_dates)
             )
         else:
             pay_dates = []
