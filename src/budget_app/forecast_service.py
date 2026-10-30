@@ -93,8 +93,8 @@ def _estimate_historical_regular_net_pence(
 ) -> tuple[int | None, int, dict[str, int]]:
     """Estimate regular net pay and report payment-line uncertainty.
 
-    All payslips dated within the 56 days ending on as_of_date are considered.
-    Both boundaries are inclusive.
+    All payslips dated from 56 days before as_of_date through as_of_date are
+    considered. Both boundaries are inclusive.
 
     Bonus and additional lines are treated as non-recurring. Their estimated
     net contribution is removed from each payslip. The bonus field and bonus
