@@ -317,7 +317,7 @@ def test_forecast_rejects_invalid_regular_income(
         )
 
 
-def test_settings_forecast_uses_average_of_six_recent_payslips(
+def test_settings_forecast_uses_all_payslips_within_eight_week_window(
     forecast_database,
 ):
     configure_settings(forecast_database)
@@ -335,11 +335,11 @@ def test_settings_forecast_uses_average_of_six_recent_payslips(
         end_date=date(2026, 11, 30),
     )
 
-    # The six latest values are 20,000 through 90,000.
-    assert result["historical_payslips_used"] == 6
+    # All seven payslips fall within the eight-week window.
+    assert result["historical_payslips_used"] == 7
     assert result["estimation_method"] == "historical_average"
-    assert result["regular_pay_estimate_pence"] == 48333
-    assert result["regular_income_pence"] == 193332
+    assert result["regular_pay_estimate_pence"] == 42857
+    assert result["regular_income_pence"] == 171428
     assert len(
         [
             entry for entry in result["entries"]
@@ -713,3 +713,41 @@ def test_settings_forecast_only_excludes_exact_actual_pay_dates(
         date(2026, 11, 20),
     ]
     assert result["forecast_diagnostics"]["recorded_pay_dates_excluded"] == 0
+    
+
+def test_settings_forecast_excludes_payslips_older_than_eight_weeks(
+    forecast_database,
+):
+    configure_settings(forecast_database)
+
+    # Forecast starts on 1 November. The window starts on 6 September.
+    add_income(forecast_database, "2026-09-05", net_pay_pence=100000)
+    add_income(forecast_database, "2026-09-06", net_pay_pence=20000)
+    add_income(forecast_database, "2026-10-30", net_pay_pence=40000)
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 6),
+    )
+
+    # 5 September is outside the window; 6 September is included.
+    assert result["historical_payslips_used"] == 2
+    assert result["regular_pay_estimate_pence"] == 30000
+
+
+def test_settings_forecast_uses_fallback_without_payslips_in_window(
+    forecast_database,
+):
+    configure_settings(forecast_database)
+
+    add_income(forecast_database, "2026-09-05", net_pay_pence=50000)
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 6),
+    )
+
+    assert result["historical_payslips_used"] == 0
+    assert result["estimation_method"] == "gross_less_provisional_25_percent"
+    assert result["fallback_gross_estimate_pence"] == 30000
+    assert result["regular_pay_estimate_pence"] == 22500

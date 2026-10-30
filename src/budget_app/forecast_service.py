@@ -13,7 +13,7 @@ from budget_app.database import database_connection
 
 
 FALLBACK_DEDUCTION_RATE = 0.25
-HISTORICAL_PAYSLIP_LIMIT = 6
+HISTORICAL_LOOKBACK_DAYS = 56
 VALID_PAY_FREQUENCIES = {"weekly", "fortnightly", "monthly"}
 
 
@@ -93,8 +93,8 @@ def _estimate_historical_regular_net_pence(
 ) -> tuple[int | None, int, dict[str, int]]:
     """Estimate regular net pay and report payment-line uncertainty.
 
-    Only payslips dated on or before as_of_date are considered. The latest
-    six eligible payslips are used.
+    All payslips dated within the 56 days ending on as_of_date are considered.
+    Both boundaries are inclusive.
 
     Bonus and additional lines are treated as non-recurring. Their estimated
     net contribution is removed from each payslip. The bonus field and bonus
@@ -107,6 +107,8 @@ def _estimate_historical_regular_net_pence(
 
     Returns (average_regular_net_pence, payslips_used, diagnostics).
     """
+    window_start = as_of_date - timedelta(days=HISTORICAL_LOOKBACK_DAYS)
+
     rows = connection.execute(
         """
         SELECT
@@ -115,11 +117,11 @@ def _estimate_historical_regular_net_pence(
             net_pay_pence,
             bonus_amount_pence
         FROM income_history
-        WHERE pay_date <= ?
+        WHERE pay_date >= ?
+          AND pay_date <= ?
         ORDER BY pay_date DESC, id DESC
-        LIMIT ?
         """,
-        (as_of_date.isoformat(), HISTORICAL_PAYSLIP_LIMIT),
+        (window_start.isoformat(), as_of_date.isoformat()),
     ).fetchall()
 
     diagnostics = {
@@ -281,16 +283,16 @@ def forecast_income_from_settings(
 ) -> dict[str, Any]:
     """Forecast dated income using settings, recent payslips and bonuses.
 
-    Historical mode averages up to the latest six payslips dated on or before
-    the forecast start date, adjusting for identifiable bonus and additional
-    earnings. Holiday and unknown payment lines are reported as uncertainty
-    rather than automatically subtracted.
+    Historical mode averages eligible payslips dated within the 56 days
+    ending on the forecast start date, adjusting for identifiable bonus
+    and additional earnings. Holiday and unknown payment lines are reported
+    as uncertainty rather than automatically subtracted.
 
     Actual income records already recorded for a scheduled pay date replace
     the projected regular-income entry for that date.
 
-    Without historical payslips, income is estimated from wage and hours
-    using a provisional 25% deduction.
+    Without eligible historical payslips, income is estimated from wage and
+    hours using a provisional 25% deduction.
 
     If next_pay_date is not configured, regular pay dates cannot be generated.
     Confirmed expected bonuses are still returned independently.
@@ -322,7 +324,7 @@ def forecast_income_from_settings(
             gross_estimate_pence = None
             estimation_method = "historical_average"
             estimation_note = (
-                "Average of up to six recent net payslips dated on or before "
+                "Average of payslips dated within the 56 days ending on "
                 "the forecast start date, with estimated net contributions "
                 "from identifiable bonus and additional earnings removed. "
                 "Holiday and unclassified payment lines are not automatically "
