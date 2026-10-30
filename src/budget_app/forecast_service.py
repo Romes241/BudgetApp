@@ -324,8 +324,9 @@ def forecast_income_from_settings(
             gross_estimate_pence = None
             estimation_method = "historical_average"
             estimation_note = (
-                "Average of payslips dated within the 56 days ending on "
-                "the forecast start date, with estimated net contributions "
+                f"Average of payslips dated from {HISTORICAL_LOOKBACK_DAYS} days "
+                "before the forecast start date up to and including that date, "
+                "with estimated net contributions "
                 "from identifiable bonus and additional earnings removed. "
                 "Holiday and unclassified payment lines are not automatically "
                 "removed because their recurrence and relationship to normal "
