@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from budget_app.paths import get_database_path
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 SCHEMA_SQL = """
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS income_payment_lines (
     classification TEXT NOT NULL DEFAULT 'unknown'
         CHECK (
             classification IN (
-                'regular', 'additional', 'bonus', 'unknown'
+                'regular', 'additional', 'bonus', 'holiday', 'unknown'
             )
         ),
     created_at TEXT NOT NULL DEFAULT (
@@ -295,6 +295,87 @@ def _migrate_to_v3(connection: sqlite3.Connection) -> None:
         """
     )
 
+def _migrate_to_v4(connection: sqlite3.Connection) -> None:
+    """Allow holiday as a payment-line classification.
+
+    SQLite cannot alter an existing CHECK constraint directly, so rebuild
+    the table and copy all existing records into the replacement.
+    """
+
+    connection.execute(
+        """
+        CREATE TABLE income_payment_lines_v4 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            income_id INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            units REAL,
+            rate_pence INTEGER,
+            amount_pence INTEGER NOT NULL,
+            classification TEXT NOT NULL DEFAULT 'unknown'
+                CHECK (
+                    classification IN (
+                        'regular', 'additional', 'bonus',
+                        'holiday', 'unknown'
+                    )
+                ),
+            created_at TEXT NOT NULL DEFAULT (
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            ),
+            FOREIGN KEY (income_id)
+                REFERENCES income_history(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+    connection.execute(
+        """
+        INSERT INTO income_payment_lines_v4 (
+            id,
+            income_id,
+            description,
+            units,
+            rate_pence,
+            amount_pence,
+            classification,
+            created_at
+        )
+        SELECT
+            id,
+            income_id,
+            description,
+            units,
+            rate_pence,
+            amount_pence,
+            classification,
+            created_at
+        FROM income_payment_lines
+        """
+    )
+
+    connection.execute("DROP TABLE income_payment_lines")
+
+    connection.execute(
+        """
+        ALTER TABLE income_payment_lines_v4
+        RENAME TO income_payment_lines
+        """
+    )
+
+    connection.execute(
+        """
+        CREATE INDEX idx_income_payment_lines_income
+        ON income_payment_lines(income_id)
+        """
+    )
+
+    connection.execute(
+        """
+        CREATE INDEX idx_income_payment_lines_classification
+        ON income_payment_lines(classification)
+        """
+    )
+
+
 def initialise_database(
     connection: sqlite3.Connection,
 ) -> None:
@@ -323,6 +404,9 @@ def initialise_database(
 
         if current_version < 3:
             _migrate_to_v3(connection)
+
+        if current_version < 4:
+            _migrate_to_v4(connection)
 
         connection.execute(
             "INSERT OR IGNORE INTO settings (id) VALUES (1)"
