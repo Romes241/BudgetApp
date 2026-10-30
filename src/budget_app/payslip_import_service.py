@@ -142,12 +142,15 @@ def preview_payslip_import(
     )
 
 
+
 def _classification(description: str) -> str:
     """Infer a conservative payment-line classification."""
     normalised = description.casefold()
 
     if "bonus" in normalised:
         return "bonus"
+    if "holiday" in normalised:
+        return "holiday"
     if "basic pay" in normalised:
         return "regular"
     if "enhanced" in normalised or "overtime" in normalised:

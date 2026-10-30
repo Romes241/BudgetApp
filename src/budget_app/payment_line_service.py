@@ -8,7 +8,7 @@ from budget_app.database import database_connection
 from budget_app.money import from_pence, to_pence
 
 
-CLASSIFICATIONS = {"regular", "additional", "bonus", "unknown"}
+CLASSIFICATIONS = {"regular", "additional", "bonus", "holiday", "unknown"}
 _UNSET = object()
 
 
@@ -21,7 +21,7 @@ def _validate_description(description: Any) -> str:
 def _validate_classification(classification: Any) -> str:
     if not isinstance(classification, str) or classification not in CLASSIFICATIONS:
         raise ValueError(
-            "Classification must be one of: regular, additional, bonus, unknown."
+            "Classification must be one of: regular, additional, bonus, holiday, unknown."
         )
     return classification
 
