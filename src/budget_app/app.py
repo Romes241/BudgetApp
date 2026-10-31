@@ -1,4 +1,3 @@
-
 import sys
 
 from PySide6.QtWidgets import (
@@ -38,9 +37,7 @@ class MainWindow(QMainWindow):
             """
         )
 
-        description = QLabel(
-            "Your personal finance dashboard."
-        )
+        description = QLabel("Your personal finance dashboard.")
 
         description.setWordWrap(True)
 
@@ -51,9 +48,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
         status_bar = QStatusBar(self)
-        status_bar.showMessage(
-            f"BudgetApp v{__version__}"
-        )
+        status_bar.showMessage(f"BudgetApp v{__version__}")
 
         self.setStatusBar(status_bar)
 

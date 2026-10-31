@@ -1,4 +1,3 @@
-
 """Tests for read-only income reconciliation."""
 
 import pytest
@@ -23,7 +22,13 @@ def income_record(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "get_database_path", lambda: db_path)
 
     return add_income(
-        "2026-10-23", 35, "672.59", "90.04", "34.45", "22.10", "526.00",
+        "2026-10-23",
+        35,
+        "672.59",
+        "90.04",
+        "34.45",
+        "22.10",
+        "526.00",
         other_deductions="0.00",
     )
 
@@ -31,7 +36,9 @@ def income_record(tmp_path, monkeypatch):
 def test_reconcile_matching_earnings_and_deductions(income_record):
     add_payment_line(income_record, "Basic Pay", "646.85", classification="regular")
     add_payment_line(
-        income_record, "Enhanced Overnight Payment Per Hr", "25.74",
+        income_record,
+        "Enhanced Overnight Payment Per Hr",
+        "25.74",
         classification="additional",
     )
 
@@ -115,15 +122,11 @@ def test_reconcile_rejects_invalid_income_id(income_id):
 
 def test_reconciliation_does_not_modify_stored_data(income_record):
     line_id = add_payment_line(income_record, "Basic Pay", "672.59")
-    before = next(
-        r for r in get_income_history() if r["id"] == income_record
-    )
+    before = next(r for r in get_income_history() if r["id"] == income_record)
 
     reconcile_income(income_record)
 
-    after = next(
-        r for r in get_income_history() if r["id"] == income_record
-    )
+    after = next(r for r in get_income_history() if r["id"] == income_record)
     assert before == after
     assert get_payment_line(line_id) is not None
     assert delete_payment_line(line_id)

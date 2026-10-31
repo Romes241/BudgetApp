@@ -11,22 +11,24 @@ from typing import Any
 
 from budget_app.database import database_connection
 
-
 FALLBACK_DEDUCTION_RATE = 0.25
 HISTORICAL_LOOKBACK_DAYS = 56
 VALID_PAY_FREQUENCIES = {"weekly", "fortnightly", "monthly"}
 
 
-def _validate_date(value: date, field_name: str) -> None:
+def _validate_date(value: date, field_name: str) -> date:
     """Require a date, excluding datetime values."""
     if not isinstance(value, date) or isinstance(value, datetime):
         raise ValueError(f"{field_name} must be a date.")
+
+    return value
 
 
 def _validate_regular_income(amount_pence: int) -> None:
     """Validate a caller-provided income baseline in pence."""
     if isinstance(amount_pence, bool) or not isinstance(amount_pence, int):
         raise ValueError("Regular income must be an integer amount in pence.")
+
     if amount_pence < 0:
         raise ValueError("Regular income cannot be negative.")
 
@@ -178,9 +180,7 @@ def _estimate_historical_regular_net_pence(
         )
 
         if gross > 0 and one_off_gross > 0:
-            estimated_one_off_net = round(
-                net * min(one_off_gross, gross) / gross
-            )
+            estimated_one_off_net = round(net * min(one_off_gross, gross) / gross)
             regular_net = max(0, net - estimated_one_off_net)
         else:
             regular_net = net
@@ -304,9 +304,7 @@ def forecast_income_from_settings(
         raise ValueError("End date cannot be before start date.")
 
     with database_connection() as connection:
-        settings = connection.execute(
-            "SELECT * FROM settings WHERE id = 1"
-        ).fetchone()
+        settings = connection.execute("SELECT * FROM settings WHERE id = 1").fetchone()
 
         if settings is None:
             raise RuntimeError("BudgetApp settings have not been initialised.")
@@ -356,9 +354,7 @@ def forecast_income_from_settings(
                 ) from None
 
             if next_pay_date.isoformat() != next_pay_date_value:
-                raise ValueError(
-                    "Configured next pay date must use YYYY-MM-DD format."
-                )
+                raise ValueError("Configured next pay date must use YYYY-MM-DD format.")
 
             pay_dates = _scheduled_dates(
                 start_date,
@@ -377,19 +373,16 @@ def forecast_income_from_settings(
             ).fetchall()
 
             recorded_pay_dates = {
-                date.fromisoformat(row["pay_date"])
-                for row in recorded_rows
+                date.fromisoformat(row["pay_date"]) for row in recorded_rows
             }
 
             original_pay_date_count = len(pay_dates)
             pay_dates = [
-                pay_date
-                for pay_date in pay_dates
-                if pay_date not in recorded_pay_dates
+                pay_date for pay_date in pay_dates if pay_date not in recorded_pay_dates
             ]
 
-            diagnostics["recorded_pay_dates_excluded"] = (
-                original_pay_date_count - len(pay_dates)
+            diagnostics["recorded_pay_dates_excluded"] = original_pay_date_count - len(
+                pay_dates
             )
         else:
             pay_dates = []
@@ -409,14 +402,10 @@ def forecast_income_from_settings(
     entries.sort(key=lambda item: (item["date"], item["type"]))
 
     regular_total = sum(
-        item["amount_pence"]
-        for item in entries
-        if item["type"] == "regular_income"
+        item["amount_pence"] for item in entries if item["type"] == "regular_income"
     )
     bonus_total = sum(
-        item["amount_pence"]
-        for item in entries
-        if item["type"] == "bonus"
+        item["amount_pence"] for item in entries if item["type"] == "bonus"
     )
 
     return {

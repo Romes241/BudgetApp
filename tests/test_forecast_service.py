@@ -340,12 +340,10 @@ def test_settings_forecast_uses_all_payslips_within_eight_week_window(
     assert result["estimation_method"] == "historical_average"
     assert result["regular_pay_estimate_pence"] == 42857
     assert result["regular_income_pence"] == 171428
-    assert len(
-        [
-            entry for entry in result["entries"]
-            if entry["type"] == "regular_income"
-        ]
-    ) == 4
+    assert (
+        len([entry for entry in result["entries"] if entry["type"] == "regular_income"])
+        == 4
+    )
 
 
 def test_settings_forecast_removes_identifiable_one_off_earnings(
@@ -404,7 +402,12 @@ def test_settings_forecast_falls_back_to_gross_wage_estimate(
     [
         (
             "weekly",
-            [date(2026, 11, 6), date(2026, 11, 13), date(2026, 11, 20), date(2026, 11, 27)],
+            [
+                date(2026, 11, 6),
+                date(2026, 11, 13),
+                date(2026, 11, 20),
+                date(2026, 11, 27),
+            ],
         ),
         (
             "fortnightly",
@@ -503,7 +506,7 @@ def test_monthly_pay_date_clamps_to_last_day_of_short_month(
     ]
 
     assert actual_dates == [date(2026, 2, 28), date(2026, 3, 28)]
-    
+
 
 def test_settings_forecast_reports_unknown_payment_lines(
     forecast_database,
@@ -530,10 +533,7 @@ def test_settings_forecast_reports_unknown_payment_lines(
     )
 
     assert result["regular_pay_estimate_pence"] == 24000
-    assert (
-        result["forecast_diagnostics"]["payslips_with_unclassified_earnings"]
-        == 1
-    )
+    assert result["forecast_diagnostics"]["payslips_with_unclassified_earnings"] == 1
     assert result["forecast_diagnostics"]["unclassified_payment_lines"] == 1
 
 
@@ -650,12 +650,12 @@ def test_settings_forecast_uses_only_payslips_on_or_before_as_of_date(
 
     assert result["historical_payslips_used"] == 2
     assert result["regular_pay_estimate_pence"] == 25000
-    
+
+
 def test_settings_forecast_excludes_dates_with_actual_income(
     forecast_database,
 ):
     configure_settings(forecast_database)
-
 
     add_income(
         forecast_database,
@@ -713,7 +713,7 @@ def test_settings_forecast_only_excludes_exact_actual_pay_dates(
         date(2026, 11, 20),
     ]
     assert result["forecast_diagnostics"]["recorded_pay_dates_excluded"] == 0
-    
+
 
 def test_settings_forecast_excludes_payslips_older_than_eight_weeks(
     forecast_database,

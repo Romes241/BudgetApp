@@ -7,7 +7,6 @@ from typing import Any
 from budget_app.database import database_connection
 from budget_app.money import from_pence, to_pence
 
-
 CLASSIFICATIONS = {"regular", "additional", "bonus", "holiday", "unknown"}
 _UNSET = object()
 
@@ -48,9 +47,7 @@ def _validate_optional_non_negative_number(value: Any, field_name: str) -> float
 def _line_to_dict(row: sqlite3.Row) -> dict:
     line = dict(row)
     line["rate"] = (
-        from_pence(line["rate_pence"])
-        if line["rate_pence"] is not None
-        else None
+        from_pence(line["rate_pence"]) if line["rate_pence"] is not None else None
     )
     line["amount"] = from_pence(line["amount_pence"])
     return line
@@ -59,9 +56,9 @@ def _line_to_dict(row: sqlite3.Row) -> dict:
 def add_payment_line(
     income_id: int,
     description: str,
-    amount: str | int | float | Decimal,
-    units: str | int | float | Decimal | None = None,
-    rate: str | int | float | Decimal | None = None,
+    amount: str | float | Decimal,
+    units: str | float | Decimal | None = None,
+    rate: str | float | Decimal | None = None,
     classification: str = "unknown",
 ) -> int:
     """Create a payment line and return its ID. Monetary inputs are pounds."""
@@ -89,7 +86,14 @@ def add_payment_line(
                 (income_id, description, units, rate_pence, amount_pence, classification)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (income_id, description, units_value, rate_pence, amount_pence, classification),
+            (
+                income_id,
+                description,
+                units_value,
+                rate_pence,
+                amount_pence,
+                classification,
+            ),
         )
         return cursor.lastrowid
 

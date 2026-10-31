@@ -1,4 +1,3 @@
-
 """Regression tests for the schema v3-to-v4 payment-line migration."""
 
 import sqlite3
@@ -160,6 +159,7 @@ def test_v3_migration_allows_holiday_classification(tmp_path):
 
         assert line["classification"] == "holiday"
 
+
 def test_payment_line_rejects_invalid_classification(tmp_path):
     database_path = tmp_path / "legacy_v3.db"
     create_version_three_database(database_path)
@@ -211,9 +211,7 @@ def test_v4_migration_preserves_indexes_and_foreign_key(tmp_path):
             for row in foreign_keys
         )
 
-        violations = connection.execute(
-            "PRAGMA foreign_key_check"
-        ).fetchall()
+        violations = connection.execute("PRAGMA foreign_key_check").fetchall()
 
         assert violations == []
 
@@ -225,9 +223,7 @@ def test_v3_migration_sets_schema_version_to_four(tmp_path):
     with connect_database(database_path) as connection:
         initialise_database(connection)
 
-        version = connection.execute(
-            "PRAGMA user_version"
-        ).fetchone()[0]
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
 
         assert version == SCHEMA_VERSION == 4
 
@@ -246,8 +242,6 @@ def test_v4_migration_is_safe_to_repeat(tmp_path):
 
         assert lines == 1
 
-        version = connection.execute(
-            "PRAGMA user_version"
-        ).fetchone()[0]
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
 
         assert version == 4

@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 from budget_app.paths import (
@@ -18,9 +17,7 @@ def test_app_data_directory_is_created(tmp_path):
 def test_database_path_is_inside_app_data(tmp_path):
     database_path = get_database_path(tmp_path)
 
-    assert database_path == (
-        tmp_path / "BudgetApp" / "budget.db"
-    )
+    assert database_path == (tmp_path / "BudgetApp" / "budget.db")
 
     assert database_path.parent.is_dir()
 
@@ -28,9 +25,7 @@ def test_database_path_is_inside_app_data(tmp_path):
 def test_payslip_directory_is_created(tmp_path):
     payslip_dir = get_payslip_dir(tmp_path)
 
-    assert payslip_dir == (
-        tmp_path / "BudgetApp" / "payslips"
-    )
+    assert payslip_dir == (tmp_path / "BudgetApp" / "payslips")
 
     assert payslip_dir.is_dir()
 
