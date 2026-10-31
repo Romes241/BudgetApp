@@ -1,10 +1,9 @@
-
 """Utilities for handling monetary values safely."""
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 
-def to_pence(amount: str | int | float | Decimal) -> int:
+def to_pence(amount: str | float | Decimal) -> int:
     """Convert a pound amount to integer pennies.
 
     Amounts with more than two decimal places are rounded

@@ -1,4 +1,3 @@
-
 from decimal import Decimal
 
 from budget_app.payslip_extractor import (
@@ -65,13 +64,12 @@ def test_extracts_current_period_summary():
     assert result.other_deductions == Decimal("0.00")
     assert result.net_pay == Decimal("526.00")
 
+
 def test_extracts_all_earnings_lines():
     result = extract_payslip_text(SAMPLE)
 
     assert len(result.earnings) == 7
-    assert result.earnings[0].description == (
-        "Enhanced Overnight Payment Per Hr"
-    )
+    assert result.earnings[0].description == ("Enhanced Overnight Payment Per Hr")
     assert result.earnings[0].units == Decimal("1.85")
     assert result.earnings[0].rate == Decimal("1.0000")
     assert result.earnings[0].amount == Decimal("1.85")
@@ -87,25 +85,21 @@ def test_validates_totals():
 
     assert result.warnings == []
 
+
 def test_warns_when_detailed_tax_disagrees_with_summary():
     text = SAMPLE.replace("Tax Paid £90.04", "Tax Paid £89.04")
     text = text.replace("Total £146.59", "Total £145.59")
 
     result = extract_payslip_text(text)
 
-    assert "Detailed tax is £89.04, but summary tax is £90.04." in (
-        result.warnings
-    )
+    assert "Detailed tax is £89.04, but summary tax is £90.04." in (result.warnings)
 
 
 def test_warns_when_detailed_total_disagrees_with_summary():
-    result = extract_payslip_text(
-        SAMPLE.replace("Total £146.59", "Total £146.58")
-    )
+    result = extract_payslip_text(SAMPLE.replace("Total £146.59", "Total £146.58"))
 
     assert (
-        "Detailed deductions total is £146.58, but summary deductions "
-        "total is £146.59."
+        "Detailed deductions total is £146.58, but summary deductions total is £146.59."
     ) in result.warnings
 
 
@@ -114,13 +108,10 @@ def test_missing_payments_section_is_flagged():
 
     assert result.earnings == []
     assert any("payments section" in warning for warning in result.warnings)
-    
+
 
 def test_extracts_pay_date_from_filename():
-    assert (
-        extract_pay_date("Payslip_PayDate_16102026.pdf")
-        == "2026-10-16"
-    )
+    assert extract_pay_date("Payslip_PayDate_16102026.pdf") == "2026-10-16"
 
 
 def test_rejects_invalid_pay_date():

@@ -25,29 +25,33 @@ def reconcile_income(income_id: int) -> dict:
     checks = []
 
     if not payment_lines:
-        checks.append({
-            "name": "earnings_total",
-            "status": "missing_breakdown",
-            "expected_pence": gross_pence,
-            "actual_pence": None,
-            "difference_pence": None,
-            "message": "No payment lines are recorded; the earnings breakdown cannot be reconciled.",
-        })
+        checks.append(
+            {
+                "name": "earnings_total",
+                "status": "missing_breakdown",
+                "expected_pence": gross_pence,
+                "actual_pence": None,
+                "difference_pence": None,
+                "message": "No payment lines are recorded; the earnings breakdown cannot be reconciled.",
+            }
+        )
     else:
         lines_total_pence = sum(int(line["amount_pence"]) for line in payment_lines)
         difference = lines_total_pence - gross_pence
-        checks.append({
-            "name": "earnings_total",
-            "status": "passed" if difference == 0 else "failed",
-            "expected_pence": gross_pence,
-            "actual_pence": lines_total_pence,
-            "difference_pence": difference,
-            "message": (
-                "Payment lines match gross pay."
-                if difference == 0
-                else "Payment-line total does not match gross pay."
-            ),
-        })
+        checks.append(
+            {
+                "name": "earnings_total",
+                "status": "passed" if difference == 0 else "failed",
+                "expected_pence": gross_pence,
+                "actual_pence": lines_total_pence,
+                "difference_pence": difference,
+                "message": (
+                    "Payment lines match gross pay."
+                    if difference == 0
+                    else "Payment-line total does not match gross pay."
+                ),
+            }
+        )
 
     deductions_pence = (
         int(income["tax_paid_pence"])
@@ -58,18 +62,20 @@ def reconcile_income(income_id: int) -> dict:
     expected_net_pence = gross_pence - deductions_pence
     actual_net_pence = int(income["net_pay_pence"])
     net_difference = actual_net_pence - expected_net_pence
-    checks.append({
-        "name": "net_pay",
-        "status": "passed" if net_difference == 0 else "failed",
-        "expected_pence": expected_net_pence,
-        "actual_pence": actual_net_pence,
-        "difference_pence": net_difference,
-        "message": (
-            "Net pay matches gross pay minus deductions."
-            if net_difference == 0
-            else "Net pay does not match gross pay minus deductions."
-        ),
-    })
+    checks.append(
+        {
+            "name": "net_pay",
+            "status": "passed" if net_difference == 0 else "failed",
+            "expected_pence": expected_net_pence,
+            "actual_pence": actual_net_pence,
+            "difference_pence": net_difference,
+            "message": (
+                "Net pay matches gross pay minus deductions."
+                if net_difference == 0
+                else "Net pay does not match gross pay minus deductions."
+            ),
+        }
+    )
 
     statuses = {check["status"] for check in checks}
     if "failed" in statuses:

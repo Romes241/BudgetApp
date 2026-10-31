@@ -1,8 +1,6 @@
-
 from pathlib import Path
 
 from platformdirs import user_data_dir
-
 
 APP_NAME = "BudgetApp"
 APP_AUTHOR = "BudgetApp"

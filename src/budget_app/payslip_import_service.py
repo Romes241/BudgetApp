@@ -43,10 +43,9 @@ def _basic_hours(earnings: list[EarningsLine]) -> Decimal:
         (
             line.units
             for line in earnings
-            if line.units is not None
-            and "basic pay" in line.description.casefold()
+            if line.units is not None and "basic pay" in line.description.casefold()
         ),
-        start=Decimal("0"),
+        start=Decimal(0),
     )
 
 
@@ -82,13 +81,9 @@ def validate_payslip(data: PayslipData) -> list[str]:
         if not line.description.strip():
             errors.append(f"Earnings line {index} has no description.")
         if not line.amount.is_finite() or line.amount < 0:
-            errors.append(
-                f"Earnings line {index} has an invalid amount."
-            )
+            errors.append(f"Earnings line {index} has an invalid amount.")
         for label, value in (("units", line.units), ("rate", line.rate)):
-            if value is not None and (
-                not value.is_finite() or value < 0
-            ):
+            if value is not None and (not value.is_finite() or value < 0):
                 errors.append(
                     f"Earnings line {index} {label} must be finite and non-negative."
                 )
@@ -116,9 +111,7 @@ def validate_payslip(data: PayslipData) -> list[str]:
         and data.net_pay is not None
         and all(amount is not None for amount in amounts)
     ):
-        expected_net = data.gross_pay - sum(
-            amounts, start=Decimal("0.00")
-        )
+        expected_net = data.gross_pay - sum(amounts, start=Decimal("0.00"))
         if expected_net != data.net_pay:
             errors.append(
                 f"Expected net pay £{expected_net}, "
@@ -142,7 +135,6 @@ def preview_payslip_import(
     )
 
 
-
 def _classification(description: str) -> str:
     """Infer a conservative payment-line classification."""
     normalised = description.casefold()
@@ -159,9 +151,7 @@ def _classification(description: str) -> str:
     return "unknown"
 
 
-def _reconcile_inserted_income(
-    connection: sqlite3.Connection, income_id: int
-) -> dict:
+def _reconcile_inserted_income(connection: sqlite3.Connection, income_id: int) -> dict:
     """Build a reconciliation report for a just-inserted income row."""
     income = connection.execute(
         """
@@ -202,9 +192,7 @@ def _reconcile_inserted_income(
             }
         )
     else:
-        lines_total_pence = sum(
-            int(line["amount_pence"]) for line in payment_lines
-        )
+        lines_total_pence = sum(int(line["amount_pence"]) for line in payment_lines)
         difference = lines_total_pence - gross_pence
         checks.append(
             {
@@ -283,8 +271,7 @@ def import_payslip(
 
     if not preview.valid:
         raise PayslipValidationError(
-            "Payslip cannot be imported:\n- "
-            + "\n- ".join(preview.errors)
+            "Payslip cannot be imported:\n- " + "\n- ".join(preview.errors)
         )
 
     data = preview.data
@@ -350,9 +337,7 @@ def import_payslip(
 
             for line in data.earnings:
                 units = float(line.units) if line.units is not None else None
-                rate_pence = (
-                    to_pence(line.rate) if line.rate is not None else None
-                )
+                rate_pence = to_pence(line.rate) if line.rate is not None else None
 
                 connection.execute(
                     """
@@ -388,9 +373,7 @@ def import_payslip(
                 (data.source_hash, source_file, income_id),
             )
 
-            reconciliation = _reconcile_inserted_income(
-                connection, income_id
-            )
+            reconciliation = _reconcile_inserted_income(connection, income_id)
 
             return {
                 "income_id": income_id,

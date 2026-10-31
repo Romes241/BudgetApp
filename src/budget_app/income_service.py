@@ -6,8 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from budget_app.database import database_connection
-from budget_app.money import to_pence, from_pence
-
+from budget_app.money import from_pence, to_pence
 
 MONEY_FIELDS = (
     "gross_pay",
@@ -32,10 +31,10 @@ def _validate_date(pay_date: str) -> None:
         raise ValueError("Pay date must use YYYY-MM-DD format.")
 
 
-def _validate_hours(hours_worked: int | float) -> float:
+def _validate_hours(hours_worked: float) -> float:
     try:
         hours = Decimal(str(hours_worked))
-    except Exception:
+    except (ValueError, TypeError, ArithmeticError):
         raise ValueError("Hours worked must be a valid number.") from None
 
     if not hours.is_finite() or hours < 0:
@@ -116,15 +115,15 @@ def get_income_history() -> list[dict]:
 
 def add_income(
     pay_date: str,
-    hours_worked: int | float,
-    gross_pay: str | int | float | Decimal,
-    tax_paid: str | int | float | Decimal,
-    ni_paid: str | int | float | Decimal,
-    pension_paid: str | int | float | Decimal,
-    net_pay: str | int | float | Decimal,
+    hours_worked: float,
+    gross_pay: str | float | Decimal,
+    tax_paid: str | float | Decimal,
+    ni_paid: str | float | Decimal,
+    pension_paid: str | float | Decimal,
+    net_pay: str | float | Decimal,
     source_file: str | None = None,
-    other_deductions: str | int | float | Decimal = 0,
-    bonus_amount: str | int | float | Decimal | None = None,
+    other_deductions: str | float | Decimal = 0,
+    bonus_amount: str | float | Decimal | None = None,
     bonus_reason: str | None = None,
 ) -> int:
     """Add an actual pay record and return its database ID."""
@@ -180,12 +179,12 @@ def add_income(
 def update_income(
     income_id: int,
     pay_date: str,
-    hours_worked: int | float,
-    gross_pay: str | int | float | Decimal,
-    tax_paid: str | int | float | Decimal,
-    ni_paid: str | int | float | Decimal,
-    pension_paid: str | int | float | Decimal,
-    net_pay: str | int | float | Decimal,
+    hours_worked: float,
+    gross_pay: str | float | Decimal,
+    tax_paid: str | float | Decimal,
+    ni_paid: str | float | Decimal,
+    pension_paid: str | float | Decimal,
+    net_pay: str | float | Decimal,
     source_file: str | None = None,
     other_deductions: Any = _UNSET,
     bonus_amount: Any = _UNSET,
@@ -199,7 +198,6 @@ def update_income(
 
     _validate_date(pay_date)
     hours = _validate_hours(hours_worked)
-
 
     amounts = _validate_amounts(
         gross_pay,

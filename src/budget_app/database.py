@@ -1,11 +1,10 @@
 """SQLite database connection, schema and migrations."""
 
 import sqlite3
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
 
 from budget_app.paths import get_database_path
-
 
 SCHEMA_VERSION = 4
 
@@ -231,9 +230,7 @@ def _table_columns(
 
     return {
         row["name"]
-        for row in connection.execute(
-            f"PRAGMA table_info({table_name})"
-        ).fetchall()
+        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
     }
 
 
@@ -252,19 +249,15 @@ def _migrate_to_v2(connection: sqlite3.Connection) -> None:
         )
 
     if "next_pay_date" not in settings_columns:
-        connection.execute(
-            "ALTER TABLE settings ADD COLUMN next_pay_date TEXT"
-        )
+        connection.execute("ALTER TABLE settings ADD COLUMN next_pay_date TEXT")
 
     income_columns = _table_columns(connection, "income_history")
     additions = {
         "other_deductions_pence": (
-            "INTEGER NOT NULL DEFAULT 0 "
-            "CHECK (other_deductions_pence >= 0)"
+            "INTEGER NOT NULL DEFAULT 0 CHECK (other_deductions_pence >= 0)"
         ),
         "bonus_amount_pence": (
-            "INTEGER CHECK "
-            "(bonus_amount_pence IS NULL OR bonus_amount_pence >= 0)"
+            "INTEGER CHECK (bonus_amount_pence IS NULL OR bonus_amount_pence >= 0)"
         ),
         "bonus_reason": "TEXT",
     }
@@ -272,9 +265,9 @@ def _migrate_to_v2(connection: sqlite3.Connection) -> None:
     for column, definition in additions.items():
         if column not in income_columns:
             connection.execute(
-                f"ALTER TABLE income_history "
-                f"ADD COLUMN {column} {definition}"
+                f"ALTER TABLE income_history ADD COLUMN {column} {definition}"
             )
+
 
 def _migrate_to_v3(connection: sqlite3.Connection) -> None:
     """Add tracking for imported payslip files."""
@@ -294,6 +287,7 @@ def _migrate_to_v3(connection: sqlite3.Connection) -> None:
         )
         """
     )
+
 
 def _migrate_to_v4(connection: sqlite3.Connection) -> None:
     """Allow holiday as a payment-line classification.
@@ -381,9 +375,7 @@ def initialise_database(
 ) -> None:
     """Create the schema and migrate older databases."""
 
-    current_version = connection.execute(
-        "PRAGMA user_version"
-    ).fetchone()[0]
+    current_version = connection.execute("PRAGMA user_version").fetchone()[0]
 
     if current_version > SCHEMA_VERSION:
         raise RuntimeError(
@@ -408,9 +400,7 @@ def initialise_database(
         if current_version < 4:
             _migrate_to_v4(connection)
 
-        connection.execute(
-            "INSERT OR IGNORE INTO settings (id) VALUES (1)"
-        )
+        connection.execute("INSERT OR IGNORE INTO settings (id) VALUES (1)")
         connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         connection.commit()
     except Exception:

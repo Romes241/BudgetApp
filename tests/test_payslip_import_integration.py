@@ -1,9 +1,9 @@
-
 import sqlite3
 from decimal import Decimal
 
 import pytest
 
+import budget_app.payslip_import_service as import_service
 from budget_app.database import connect_database, initialise_database
 from budget_app.payslip_extractor import EarningsLine, PayslipData
 from budget_app.payslip_import_service import (
@@ -11,7 +11,7 @@ from budget_app.payslip_import_service import (
     PayslipValidationError,
     import_payslip,
 )
-import budget_app.payslip_import_service as import_service
+
 
 def make_valid_data():
     return PayslipData(
@@ -26,12 +26,13 @@ def make_valid_data():
         earnings=[
             EarningsLine(
                 description="Basic Pay",
-                units=Decimal("10"),
+                units=Decimal(10),
                 rate=Decimal("10.00"),
                 amount=Decimal("100.00"),
             )
         ],
     )
+
 
 @pytest.fixture
 def database_path(tmp_path):
@@ -41,6 +42,7 @@ def database_path(tmp_path):
         initialise_database(connection)
 
     return path
+
 
 @pytest.fixture
 def extracted_data(monkeypatch):
@@ -52,11 +54,11 @@ def extracted_data(monkeypatch):
     )
     return data
 
+
 def table_count(database_path, table):
     with connect_database(database_path) as connection:
-        return connection.execute(
-            f"SELECT COUNT(*) FROM {table}"
-        ).fetchone()[0]
+        return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
 
 def test_successful_import_creates_income_lines_and_tracking(
     database_path, extracted_data
@@ -84,6 +86,7 @@ def test_successful_import_creates_income_lines_and_tracking(
         assert income["pension_paid_pence"] == 500
         assert income["other_deductions_pence"] == 0
 
+
 def test_duplicate_file_is_rejected_without_extra_records(
     database_path, extracted_data
 ):
@@ -103,6 +106,7 @@ def test_duplicate_file_is_rejected_without_extra_records(
     assert table_count(database_path, "income_history") == 1
     assert table_count(database_path, "income_payment_lines") == 1
     assert table_count(database_path, "imported_payslips") == 1
+
 
 def test_invalid_data_writes_nothing(database_path, monkeypatch):
     data = make_valid_data()
@@ -125,6 +129,7 @@ def test_invalid_data_writes_nothing(database_path, monkeypatch):
     assert table_count(database_path, "income_payment_lines") == 0
     assert table_count(database_path, "imported_payslips") == 0
 
+
 def test_payment_line_failure_rolls_back_entire_import(
     database_path, extracted_data, monkeypatch
 ):
@@ -142,15 +147,11 @@ def test_payment_line_failure_rolls_back_entire_import(
             return self
 
         def __exit__(self, exc_type, exc_value, traceback):
-            return self.context.__exit__(
-                exc_type, exc_value, traceback
-            )
+            return self.context.__exit__(exc_type, exc_value, traceback)
 
         def execute(self, sql, parameters=()):
             if "INSERT INTO income_payment_lines" in sql:
-                raise sqlite3.IntegrityError(
-                    "Simulated payment-line failure"
-                )
+                raise sqlite3.IntegrityError("Simulated payment-line failure")
 
             return self.connection.execute(sql, parameters)
 

@@ -13,6 +13,7 @@ dependencies = [
     "PySide6>=6.8,<7",
     "platformdirs>=4.0,<5",
     "pypdf>=5,<7",
+    "ruff>=0.8,<1",
 ]
 
 [project.optional-dependencies]
@@ -28,3 +29,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint]
+ignore = ["TRY004"]

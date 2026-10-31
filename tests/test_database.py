@@ -1,4 +1,3 @@
-
 import sqlite3
 
 import pytest
@@ -8,7 +7,6 @@ from budget_app.database import (
     connect_database,
     initialise_database,
 )
-
 
 EXPECTED_TABLES = {
     "settings",
@@ -45,9 +43,7 @@ def test_initialise_creates_default_settings(tmp_path):
     with connect_database(tmp_path / "test.db") as connection:
         initialise_database(connection)
 
-        settings = connection.execute(
-            "SELECT * FROM settings WHERE id = 1"
-        ).fetchone()
+        settings = connection.execute("SELECT * FROM settings WHERE id = 1").fetchone()
 
         assert settings is not None
         assert settings["current_balance_pence"] == 0
@@ -59,9 +55,7 @@ def test_initialise_is_safe_to_repeat(tmp_path):
         initialise_database(connection)
         initialise_database(connection)
 
-        count = connection.execute(
-            "SELECT COUNT(*) FROM settings"
-        ).fetchone()[0]
+        count = connection.execute("SELECT COUNT(*) FROM settings").fetchone()[0]
 
         assert count == 1
 
@@ -70,9 +64,7 @@ def test_schema_version_is_set(tmp_path):
     with connect_database(tmp_path / "test.db") as connection:
         initialise_database(connection)
 
-        version = connection.execute(
-            "PRAGMA user_version"
-        ).fetchone()[0]
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
 
         assert version == SCHEMA_VERSION
 
@@ -140,9 +132,7 @@ def test_income_history_persists_after_reopening(tmp_path):
         )
 
     with connect_database(database_path) as connection:
-        income = connection.execute(
-            "SELECT * FROM income_history"
-        ).fetchone()
+        income = connection.execute("SELECT * FROM income_history").fetchone()
 
         assert income["gross_pay_pence"] == 50000
         assert income["net_pay_pence"] == 41500
@@ -181,7 +171,8 @@ def test_savings_goal_requires_positive_target(tmp_path):
                 """,
                 ("Invalid goal", 0),
             )
-            
+
+
 def create_version_one_database(database_path):
     """Create the previous schema and populate an existing payslip."""
 
@@ -281,9 +272,7 @@ def test_migration_updates_schema_version(tmp_path):
     with connect_database(database_path) as connection:
         initialise_database(connection)
 
-        version = connection.execute(
-            "PRAGMA user_version"
-        ).fetchone()[0]
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
 
         assert version == SCHEMA_VERSION == 4
 
@@ -323,6 +312,7 @@ def test_payment_line_requires_existing_income(tmp_path):
                 """
             )
 
+
 def test_migration_creates_imported_payslips_table(tmp_path):
     database_path = tmp_path / "legacy.db"
     create_version_one_database(database_path)
@@ -345,13 +335,7 @@ def test_migration_creates_imported_payslips_table(tmp_path):
             "imported_at",
         }.issubset(columns)
 
-        indexes = connection.execute(
-            "PRAGMA index_list(imported_payslips)"
-        ).fetchall()
+        indexes = connection.execute("PRAGMA index_list(imported_payslips)").fetchall()
 
-        unique_indexes = [
-            index["name"]
-            for index in indexes
-            if index["unique"]
-        ]
+        unique_indexes = [index["name"] for index in indexes if index["unique"]]
         assert len(unique_indexes) >= 2

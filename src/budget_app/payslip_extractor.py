@@ -10,6 +10,8 @@ from decimal import Decimal
 from pathlib import Path
 
 from pypdf import PdfReader
+from pypdf.errors import PdfReadError
+
 
 @dataclass
 class EarningsLine:
@@ -19,6 +21,7 @@ class EarningsLine:
     units: Decimal | None
     rate: Decimal | None
     amount: Decimal
+
 
 @dataclass
 class PayslipData:
@@ -35,9 +38,11 @@ class PayslipData:
     earnings: list[EarningsLine] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
+
 def _money(value: str) -> Decimal:
     """Parse a monetary value without using binary floating point."""
     return Decimal(value.replace("£", "").replace(",", "").strip())
+
 
 def _summary_amount(text: str, label: str) -> Decimal | None:
     """Extract a current-period summary amount, excluding its YTD value."""
@@ -47,6 +52,7 @@ def _summary_amount(text: str, label: str) -> Decimal | None:
     )
     match = re.search(pattern, text, re.IGNORECASE)
     return _money(match.group(1)) if match else None
+
 
 def _extract_deductions(
     text: str,
@@ -67,9 +73,14 @@ def _extract_deductions(
     )
 
     if not section:
-        return None, None, None, None, None, [
-            "Could not find the detailed deductions section."
-        ]
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            ["Could not find the detailed deductions section."],
+        )
 
     deduction_text = section.group(1)
 
@@ -108,18 +119,20 @@ def _extract_deductions(
             pension_amounts.append(amount)
         elif "tax" in normalised:
             tax_amounts.append(amount)
-        elif (
-            normalised.startswith("ni")
-            or "national insurance" in normalised
-        ):
+        elif normalised.startswith("ni") or "national insurance" in normalised:
             ni_amounts.append(amount)
         else:
             other_amounts.append(amount)
 
     if not (tax_amounts and ni_amounts and pension_amounts):
-        return None, None, None, None, None, [
-            "The detailed deductions section could not be fully identified."
-        ]
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            ["The detailed deductions section could not be fully identified."],
+        )
 
     tax = sum(tax_amounts, start=Decimal("0.00"))
     ni = sum(ni_amounts, start=Decimal("0.00"))
@@ -127,6 +140,7 @@ def _extract_deductions(
     other = sum(other_amounts, start=Decimal("0.00"))
 
     return tax, ni, pension, other, deduction_total, []
+
 
 def extract_pay_date(filename: str | Path) -> str | None:
     """Extract the pay date from Payslip_PayDate_DDMMYYYY.pdf."""
@@ -142,19 +156,21 @@ def extract_pay_date(filename: str | Path) -> str | None:
         return None
 
     try:
-        return datetime.strptime(
-            match.group(1), "%d%m%Y"
-        ).date().isoformat()
+        return datetime.strptime(match.group(1), "%d%m%Y").date().isoformat()
     except ValueError:
         return None
 
+
 def extract_payslip_text(text: str) -> PayslipData:
     """Parse the known payslip text layout into structured data."""
-    detailed_tax, detailed_ni, pension_paid, other_deductions, (
-        deduction_total
-    ), deduction_warnings = (
-        _extract_deductions(text)
-    )
+    (
+        detailed_tax,
+        detailed_ni,
+        pension_paid,
+        other_deductions,
+        (deduction_total),
+        deduction_warnings,
+    ) = _extract_deductions(text)
     tax_paid = _summary_amount(text, "PAYE Tax")
     ni_paid = _summary_amount(text, "NIC")
 
@@ -174,8 +190,7 @@ def extract_payslip_text(text: str) -> PayslipData:
         and detailed_tax != result.tax_paid
     ):
         result.warnings.append(
-            f"Detailed tax is £{detailed_tax}, but summary tax is "
-            f"£{result.tax_paid}."
+            f"Detailed tax is £{detailed_tax}, but summary tax is £{result.tax_paid}."
         )
 
     if (
@@ -184,8 +199,7 @@ def extract_payslip_text(text: str) -> PayslipData:
         and detailed_ni != result.ni_paid
     ):
         result.warnings.append(
-            f"Detailed NI is £{detailed_ni}, but summary NI is "
-            f"£{result.ni_paid}."
+            f"Detailed NI is £{detailed_ni}, but summary NI is £{result.ni_paid}."
         )
 
     deductions = (
@@ -197,8 +211,7 @@ def extract_payslip_text(text: str) -> PayslipData:
     if (
         deduction_total is not None
         and all(value is not None for value in deductions)
-        and deduction_total
-        != sum(deductions, start=Decimal("0.00"))
+        and deduction_total != sum(deductions, start=Decimal("0.00"))
     ):
         summary_total = sum(deductions, start=Decimal("0.00"))
         result.warnings.append(
@@ -214,9 +227,7 @@ def extract_payslip_text(text: str) -> PayslipData:
     )
 
     if not section:
-        result.warnings.append(
-            "Could not find the employee payments section."
-        )
+        result.warnings.append("Could not find the employee payments section.")
         return result
 
     payment_text = section.group(1)
@@ -242,13 +253,12 @@ def extract_payslip_text(text: str) -> PayslipData:
 
     for index, match in enumerate(matches):
         previous_end = matches[index - 1].end() if index else 0
-        description = payment_text[previous_end:match.start()]
+        description = payment_text[previous_end : match.start()]
         description = " ".join(description.split())
 
         if not description:
             result.warnings.append(
-                "Found an earnings row without a description: "
-                f"{match.group(0)}"
+                f"Found an earnings row without a description: {match.group(0)}"
             )
             continue
 
@@ -278,54 +288,45 @@ def extract_payslip_text(text: str) -> PayslipData:
                 f"but gross pay is £{result.gross_pay}."
             )
 
-    if result.gross_pay is not None and result.net_pay is not None:
-        if all(value is not None for value in deductions):
-            expected_net = result.gross_pay - sum(
-                deductions, start=Decimal("0.00")
+    if (
+        result.gross_pay is not None
+        and result.net_pay is not None
+        and all(value is not None for value in deductions)
+    ):
+        expected_net = result.gross_pay - sum(
+            deductions,
+            start=Decimal("0.00"),
+        )
+
+        if expected_net != result.net_pay:
+            result.warnings.append(
+                f"Gross minus deductions is £{expected_net}, "
+                f"but net pay is £{result.net_pay}."
             )
 
-            if expected_net != result.net_pay:
-                result.warnings.append(
-                    f"Gross minus deductions is £{expected_net}, "
-                    f"but net pay is £{result.net_pay}."
-                )
-
     return result
+
 
 def extract_payslip_pdf(path: str | Path) -> PayslipData:
     """Extract and parse text from a selectable-text PDF."""
     pdf_path = Path(path)
 
     if not pdf_path.is_file():
-        return PayslipData(
-            warnings=[
-                f"Payslip file does not exist: {pdf_path.name}"
-            ]
-        )
+        return PayslipData(warnings=[f"Payslip file does not exist: {pdf_path.name}"])
 
     if pdf_path.suffix.lower() != ".pdf":
-        return PayslipData(
-            warnings=["The selected file is not a PDF."]
-        )
+        return PayslipData(warnings=["The selected file is not a PDF."])
 
     try:
         reader = PdfReader(str(pdf_path))
-        text = "\n".join(
-            page.extract_text() or "" for page in reader.pages
-        )
-        source_hash = hashlib.sha256(
-            pdf_path.read_bytes()
-        ).hexdigest()
-    except Exception as exc:
-        return PayslipData(
-            warnings=[f"Could not read the PDF: {exc}"]
-        )
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        source_hash = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+    except (PdfReadError, OSError, ValueError) as exc:
+        return PayslipData(warnings=[f"Could not read the PDF: {exc}"])
 
     if not text.strip():
         result = PayslipData(
-            warnings=[
-                "No selectable text was found. This PDF may require OCR."
-            ]
+            warnings=["No selectable text was found. This PDF may require OCR."]
         )
     else:
         result = extract_payslip_text(text)
