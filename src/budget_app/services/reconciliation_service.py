@@ -1,7 +1,7 @@
 """Read-only reconciliation checks for actual income records."""
 
-from budget_app.income_service import get_income_history
-from budget_app.payment_line_service import get_payment_lines
+from budget_app.services.income_service import get_income_history
+from budget_app.services.payment_line_service import get_payment_lines
 
 
 def reconcile_income(income_id: int) -> dict:

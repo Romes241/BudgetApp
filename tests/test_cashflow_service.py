@@ -2,11 +2,11 @@ from datetime import date, datetime
 
 import pytest
 
-from budget_app import cashflow_service
 from budget_app.database import connect_database, initialise_database
-from budget_app.debt_service import add_debt
-from budget_app.fixed_expense_service import add_fixed_expense
-from budget_app.variable_expense_service import add_variable_expense
+from budget_app.services import cashflow_service
+from budget_app.services.debt_service import add_debt
+from budget_app.services.fixed_expense_service import add_fixed_expense
+from budget_app.services.variable_expense_service import add_variable_expense
 
 
 @pytest.fixture
@@ -20,10 +20,10 @@ def cashflow_database(tmp_path, monkeypatch):
         initialise_database(connection)
 
     for module in (
-        "budget_app.cashflow_service",
-        "budget_app.debt_service",
-        "budget_app.fixed_expense_service",
-        "budget_app.variable_expense_service",
+        "budget_app.services.cashflow_service",
+        "budget_app.services.debt_service",
+        "budget_app.services.fixed_expense_service",
+        "budget_app.services.variable_expense_service",
     ):
         monkeypatch.setattr(
             f"{module}.database_connection",

@@ -4,8 +4,8 @@ from decimal import Decimal
 
 import pytest
 
-from budget_app.income_service import add_income
-from budget_app.payment_line_service import (
+from budget_app.services.income_service import add_income
+from budget_app.services.payment_line_service import (
     add_payment_line,
     delete_payment_line,
     get_payment_line,

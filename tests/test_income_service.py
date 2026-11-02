@@ -7,7 +7,7 @@ from budget_app.database import (
     database_connection,
     initialise_database,
 )
-from budget_app.income_service import (
+from budget_app.services.income_service import (
     add_income,
     delete_income,
     get_income_history,
@@ -24,7 +24,7 @@ def income_database(tmp_path, monkeypatch):
         return database_connection(database_path)
 
     monkeypatch.setattr(
-        "budget_app.income_service.database_connection",
+        "budget_app.services.income_service.database_connection",
         test_connection,
     )
 

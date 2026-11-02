@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 
 from budget_app.database import connect_database, initialise_database
-from budget_app.debt_service import (
+from budget_app.services.debt_service import (
     add_debt,
     deactivate_debt,
     get_debt,
@@ -21,7 +21,7 @@ def database(tmp_path, monkeypatch):
         initialise_database(connection)
 
     monkeypatch.setattr(
-        "budget_app.debt_service.database_connection",
+        "budget_app.services.debt_service.database_connection",
         lambda: connect_database(database_path),
     )
 

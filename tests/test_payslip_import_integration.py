@@ -3,10 +3,10 @@ from decimal import Decimal
 
 import pytest
 
-import budget_app.payslip_import_service as import_service
+import budget_app.services.payslip_import_service as import_service
 from budget_app.database import connect_database, initialise_database
 from budget_app.payslip_extractor import EarningsLine, PayslipData
-from budget_app.payslip_import_service import (
+from budget_app.services.payslip_import_service import (
     DuplicatePayslipError,
     PayslipValidationError,
     import_payslip,

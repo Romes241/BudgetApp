@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 
 from budget_app.payslip_extractor import EarningsLine, PayslipData
-from budget_app.payslip_import_service import (
+from budget_app.services.payslip_import_service import (
     PayslipValidationError,
     import_payslip,
     validate_payslip,
