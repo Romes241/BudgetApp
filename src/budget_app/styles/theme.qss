@@ -6,11 +6,13 @@ QMainWindow, QWidget {
     font-size: 10pt;
 }
 
+/* Sidebar */
 QFrame#sidebar {
     background-color: #191c23;
     border-right: 1px solid #30343d;
 }
 
+/* Labels */
 QLabel#appTitle {
     background-color: transparent;
     font-size: 21px;
@@ -49,17 +51,70 @@ QLabel#summaryValue {
     color: #f1f5f9;
 }
 
+QLabel#errorText {
+    background-color: transparent;
+    color: #f87171;
+}
+
+/* Summary cards */
 QFrame#summaryCard {
     background-color: #1b1e26;
     border: 1px solid #30343d;
     border-radius: 8px;
 }
 
+/* Global button styling */
+QPushButton {
+    background-color: #1b1e26;
+    color: #e4e4e7;
+    border: 1px solid #30343d;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: 500;
+}
+
+QPushButton:hover {
+    background-color: #292333;
+    border-color: #514366;
+}
+
+QPushButton:pressed {
+    background-color: #352747;
+}
+
+QPushButton:disabled {
+    background-color: #191c23;
+    color: #62626b;
+    border-color: #30343d;
+}
+
+/* Primary buttons */
+QPushButton#primaryButton {
+    background-color: #8b5cf6;
+    color: white;
+    border: 1px solid #8b5cf6;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font-weight: bold;
+}
+
+QPushButton#primaryButton:hover {
+    background-color: #7c3aed;
+    border-color: #7c3aed;
+}
+
+QPushButton#primaryButton:disabled {
+    background-color: #514366;
+    color: #c4b5fd;
+    border-color: #514366;
+}
+
+/* Navigation buttons */
 QPushButton#navigationButton {
     background-color: transparent;
     color: #cbd5e1;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 11px 14px;
     text-align: left;
     font-size: 10pt;
@@ -76,24 +131,27 @@ QPushButton#navigationButton:checked {
     font-weight: bold;
 }
 
-QPushButton#primaryButton {
-    background-color: #8b5cf6;
-    color: white;
+/* Active / inactive filter buttons */
+QPushButton#filterButton {
+    background-color: transparent;
+    color: #a1a1aa;
     border: none;
-    border-radius: 6px;
-    padding: 9px 18px;
-    font-weight: bold;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: 600;
 }
 
-QPushButton#primaryButton:hover {
-    background-color: #7c3aed;
+QPushButton#filterButton:hover {
+    background-color: #292333;
+    color: #c4a7ff;
 }
 
-QPushButton#primaryButton:disabled {
-    background-color: #514366;
-    color: #c4b5fd;
+QPushButton#filterButton:checked {
+    background-color: #352747;
+    color: #c4a7ff;
 }
 
+/* Cashflow and expense tables */
 QTableWidget#cashflowTable {
     background-color: #111318;
     alternate-background-color: #191c23;
@@ -109,6 +167,7 @@ QTableWidget#cashflowTable::item {
     padding: 7px;
 }
 
+/* Table headers */
 QHeaderView::section {
     background-color: #20232b;
     color: #cbd5e1;
@@ -119,6 +178,7 @@ QHeaderView::section {
     font-weight: bold;
 }
 
+/* Status bar */
 QStatusBar {
     background-color: #191c23;
     color: #9ca3af;

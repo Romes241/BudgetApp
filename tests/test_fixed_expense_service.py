@@ -6,6 +6,7 @@ from budget_app.services.fixed_expense_service import (
     deactivate_fixed_expense,
     get_fixed_expense,
     get_fixed_expenses,
+    reactivate_fixed_expense,
     update_fixed_expense,
 )
 
@@ -183,3 +184,36 @@ def test_expense_persists_after_reopening_database(database):
 
     assert expense["name"] == "Rent"
     assert expense["amount_pence"] == 47000
+
+
+def test_reactivate_fixed_expense(database):
+    expense_id = add_fixed_expense("Rent", "Housing", 470)
+
+    deactivate_fixed_expense(expense_id)
+
+    assert reactivate_fixed_expense(expense_id) is True
+
+    expense = get_fixed_expense(expense_id)
+
+    assert expense is not None
+    assert expense["active"] == 1
+    assert expense in get_fixed_expenses()
+
+
+def test_reactivate_returns_false_for_missing_expense(database):
+    assert reactivate_fixed_expense(999) is False
+
+
+def test_reactivate_does_not_change_expense_details(database):
+    expense_id = add_fixed_expense("Rent", "Housing", 470, 1)
+
+    deactivate_fixed_expense(expense_id)
+    reactivate_fixed_expense(expense_id)
+
+    expense = get_fixed_expense(expense_id)
+
+    assert expense["name"] == "Rent"
+    assert expense["category"] == "Housing"
+    assert expense["amount_pence"] == 47000
+    assert expense["due_day"] == 1
+    assert expense["active"] == 1

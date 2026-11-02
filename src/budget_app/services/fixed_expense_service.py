@@ -181,3 +181,19 @@ def deactivate_fixed_expense(expense_id: int) -> bool:
         )
 
         return cursor.rowcount > 0
+
+
+def reactivate_fixed_expense(expense_id: int) -> bool:
+    """Mark a fixed expense as active again."""
+
+    with database_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE fixed_expenses
+            SET active = 1
+            WHERE id = ?
+            """,
+            (expense_id,),
+        )
+
+        return cursor.rowcount > 0

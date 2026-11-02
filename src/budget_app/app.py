@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from budget_app import __version__
 from budget_app.database import connect_database, initialise_database
 from budget_app.pages.cashflow_page import CashflowPage
+from budget_app.pages.fixed_expenses_page import FixedExpensesPage
 
 
 def load_stylesheet() -> str:
@@ -78,9 +79,11 @@ class MainWindow(QMainWindow):
 
         dashboard_page = self._create_dashboard_page()
         cashflow_page = CashflowPage()
+        fixed_expenses_page = FixedExpensesPage()
 
         self.page_stack.addWidget(dashboard_page)
         self.page_stack.addWidget(cashflow_page)
+        self.page_stack.addWidget(fixed_expenses_page)
 
         self._add_navigation_button(
             sidebar_layout,
@@ -91,6 +94,11 @@ class MainWindow(QMainWindow):
             sidebar_layout,
             "Cashflow",
             cashflow_page,
+        )
+        self._add_navigation_button(
+            sidebar_layout,
+            "Fixed Expenses",
+            fixed_expenses_page,
         )
 
         sidebar_layout.addStretch()
