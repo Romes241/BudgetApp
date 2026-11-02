@@ -219,6 +219,13 @@ class CashflowPage(QWidget):
         except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
             self.projection = None
             self.transaction_table.setRowCount(0)
+            self.current_balance_card.set_value("£0.00")
+            self.projected_balance_card.title_label.setText(
+                "Projected balance at end of forecast"
+            )
+            self.projected_balance_card.set_value("£0.00")
+            self.income_card.set_value("£0.00")
+            self.outgoings_card.set_value("£0.00")
 
             self.date_range_label.setText("Projection unavailable")
             self.status_label.setText("Unable to generate cashflow projection.")
@@ -344,7 +351,9 @@ class CashflowPage(QWidget):
                 ).setForeground(QColor(colour))
 
             # Highlight negative running balances.
-            if entry["running_balance_pence"] < 0:
+            running_balance_negative = entry["running_balance_pence"] < 0
+
+            if running_balance_negative:
                 self.transaction_table.item(
                     row_index,
                     4,
@@ -355,6 +364,10 @@ class CashflowPage(QWidget):
                 for column in range(len(self.HEADERS)):
                     item = self.transaction_table.item(row_index, column)
                     item.setBackground(QColor("#30343d"))
+
+                    if column == 4 and running_balance_negative:
+                        continue
+
                     item.setForeground(QColor("#ffffff"))
 
         self.transaction_table.resizeRowsToContents()
