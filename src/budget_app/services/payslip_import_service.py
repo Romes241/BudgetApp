@@ -8,12 +8,12 @@ from decimal import Decimal
 from pathlib import Path
 
 from budget_app.database import database_connection
-from budget_app.money import to_pence
 from budget_app.payslip_extractor import (
     EarningsLine,
     PayslipData,
     extract_payslip_pdf,
 )
+from budget_app.utils.money import to_pence
 
 
 class PayslipImportError(Exception):

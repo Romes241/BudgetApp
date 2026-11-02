@@ -1,7 +1,7 @@
 import pytest
 
 from budget_app.database import connect_database, initialise_database
-from budget_app.fixed_expense_service import (
+from budget_app.services.fixed_expense_service import (
     add_fixed_expense,
     deactivate_fixed_expense,
     get_fixed_expense,
@@ -18,7 +18,7 @@ def database(tmp_path, monkeypatch):
         initialise_database(connection)
 
     monkeypatch.setattr(
-        "budget_app.fixed_expense_service.database_connection",
+        "budget_app.services.fixed_expense_service.database_connection",
         lambda: connect_database(database_path),
     )
 

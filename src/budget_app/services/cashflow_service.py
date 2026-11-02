@@ -5,10 +5,10 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from budget_app.database import database_connection
-from budget_app.debt_service import get_debts
-from budget_app.fixed_expense_service import get_fixed_expenses
-from budget_app.forecast_service import forecast_income_from_settings
-from budget_app.variable_expense_service import get_variable_expenses
+from budget_app.services.debt_service import get_debts
+from budget_app.services.fixed_expense_service import get_fixed_expenses
+from budget_app.services.forecast_service import forecast_income_from_settings
+from budget_app.services.variable_expense_service import get_variable_expenses
 
 
 def _validate_date(value: date, field_name: str) -> date:

@@ -7,7 +7,7 @@ from budget_app.database import (
     database_connection,
     initialise_database,
 )
-from budget_app.forecast_service import (
+from budget_app.services.forecast_service import (
     forecast_income,
     forecast_income_from_settings,
 )
@@ -21,7 +21,7 @@ def forecast_database(tmp_path, monkeypatch):
         return database_connection(database_path)
 
     monkeypatch.setattr(
-        "budget_app.forecast_service.database_connection",
+        "budget_app.services.forecast_service.database_connection",
         test_connection,
     )
 
