@@ -1,0 +1,126 @@
+
+QMainWindow, QWidget {
+    background-color: #111318;
+    color: #f1f5f9;
+    font-family: "Segoe UI";
+    font-size: 10pt;
+}
+
+QFrame#sidebar {
+    background-color: #191c23;
+    border-right: 1px solid #30343d;
+}
+
+QLabel#appTitle {
+    background-color: transparent;
+    font-size: 21px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+QLabel#pageHeading {
+    background-color: transparent;
+    font-size: 27px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+QLabel#sectionHeading {
+    background-color: transparent;
+    font-size: 17px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+QLabel#secondaryText {
+    background-color: transparent;
+    color: #9ca3af;
+}
+
+QLabel#summaryTitle {
+    background-color: transparent;
+    color: #a1a1aa;
+}
+
+QLabel#summaryValue {
+    background-color: transparent;
+    font-size: 21px;
+    font-weight: bold;
+    color: #f1f5f9;
+}
+
+QFrame#summaryCard {
+    background-color: #1b1e26;
+    border: 1px solid #30343d;
+    border-radius: 8px;
+}
+
+QPushButton#navigationButton {
+    background-color: transparent;
+    color: #cbd5e1;
+    border: none;
+    border-radius: 6px;
+    padding: 11px 14px;
+    text-align: left;
+    font-size: 10pt;
+}
+
+QPushButton#navigationButton:hover {
+    background-color: #292333;
+    color: #ffffff;
+}
+
+QPushButton#navigationButton:checked {
+    background-color: #352747;
+    color: #c4a7ff;
+    font-weight: bold;
+}
+
+QPushButton#primaryButton {
+    background-color: #8b5cf6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 18px;
+    font-weight: bold;
+}
+
+QPushButton#primaryButton:hover {
+    background-color: #7c3aed;
+}
+
+QPushButton#primaryButton:disabled {
+    background-color: #514366;
+    color: #c4b5fd;
+}
+
+QTableWidget#cashflowTable {
+    background-color: #111318;
+    alternate-background-color: #191c23;
+    color: #f1f5f9;
+    border: 1px solid #30343d;
+    border-radius: 7px;
+    gridline-color: #30343d;
+    selection-background-color: #352747;
+    selection-color: #ffffff;
+}
+
+QTableWidget#cashflowTable::item {
+    padding: 7px;
+}
+
+QHeaderView::section {
+    background-color: #20232b;
+    color: #cbd5e1;
+    border: none;
+    border-right: 1px solid #30343d;
+    border-bottom: 1px solid #30343d;
+    padding: 9px 8px;
+    font-weight: bold;
+}
+
+QStatusBar {
+    background-color: #191c23;
+    color: #9ca3af;
+    border-top: 1px solid #30343d;
+}
