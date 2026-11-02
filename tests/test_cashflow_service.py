@@ -76,7 +76,7 @@ def test_projection_combines_outgoings_and_calculates_running_balance(
     assert projection["entries"][-1]["running_balance_pence"] == 37000
 
 
-def test_variable_budget_accrues_daily_and_is_grouped_weekly(
+def test_variable_budget_accrues_daily_and_is_grouped_into_four_buckets(
     cashflow_database,
 ):
     set_settings(cashflow_database)
@@ -88,20 +88,18 @@ def test_variable_budget_accrues_daily_and_is_grouped_weekly(
         entry for entry in projection["entries"] if entry["type"] == "variable_expense"
     ]
 
-    # November 2026 starts on Sunday. The first allocation is a
-    # one-day week, followed by full Monday-to-Sunday weeks.
+    # Variable budgets use four month-local buckets rather than calendar
+    # weeks, so every full month has exactly four entries.
     assert [entry["date"] for entry in allocations] == [
-        date(2026, 11, 1),
-        date(2026, 11, 8),
-        date(2026, 11, 15),
-        date(2026, 11, 22),
-        date(2026, 11, 29),
+        date(2026, 11, 7),
+        date(2026, 11, 14),
+        date(2026, 11, 21),
         date(2026, 11, 30),
     ]
 
     assert sum(entry["money_out_pence"] for entry in allocations) == 20000
 
-    # The final entry contains the remaining Monday's allocation.
+    # The final bucket contains the month's remaining days.
     assert allocations[-1]["money_out_pence"] > 0
 
 
@@ -133,10 +131,16 @@ def test_variable_budget_accrues_across_month_boundaries(
     # November and December each contribute their full monthly budget.
     assert sum(entry["money_out_pence"] for entry in allocations) == 40000
 
-    # The week crossing the November/December boundary is one entry.
-    assert (
-        len([entry for entry in allocations if entry["date"] == date(2026, 12, 6)]) == 1
-    )
+    assert [entry["date"] for entry in allocations] == [
+        date(2026, 11, 7),
+        date(2026, 11, 14),
+        date(2026, 11, 21),
+        date(2026, 11, 30),
+        date(2026, 12, 7),
+        date(2026, 12, 14),
+        date(2026, 12, 21),
+        date(2026, 12, 31),
+    ]
 
 
 def test_variable_budget_only_accrues_during_projection_period(
@@ -232,3 +236,61 @@ def test_projection_honours_start_date_and_configured_horizon(
 def test_projection_rejects_datetime_start_date(cashflow_database):
     with pytest.raises(ValueError, match="Start date must be a date"):
         cashflow_service.generate_cashflow_projection(datetime(2026, 11, 1))
+
+
+def test_projection_maps_forecast_income_entries_and_running_balance(
+    cashflow_database,
+    monkeypatch,
+):
+    set_settings(cashflow_database, balance=10000)
+    monkeypatch.setattr(
+        cashflow_service,
+        "forecast_income_from_settings",
+        lambda **kwargs: {
+            "start_date": kwargs["start_date"],
+            "end_date": kwargs["end_date"],
+            "entries": [
+                {
+                    "date": date(2026, 11, 5),
+                    "type": "regular_income",
+                    "description": "Salary",
+                    "amount_pence": 25000,
+                },
+                {
+                    "date": date(2026, 11, 20),
+                    "type": "bonus",
+                    "description": "Bonus",
+                    "amount_pence": 5000,
+                    "expected_bonus_id": 42,
+                },
+            ],
+            "total_income_pence": 30000,
+        },
+    )
+
+    projection = cashflow_service.generate_cashflow_projection(date(2026, 11, 1))
+
+    assert projection["entries"] == [
+        {
+            "date": date(2026, 11, 5),
+            "type": "regular_income",
+            "description": "Salary",
+            "amount_pence": 25000,
+            "source_id": None,
+            "money_in_pence": 25000,
+            "money_out_pence": 0,
+            "running_balance_pence": 35000,
+        },
+        {
+            "date": date(2026, 11, 20),
+            "type": "bonus",
+            "description": "Bonus",
+            "amount_pence": 5000,
+            "source_id": 42,
+            "money_in_pence": 5000,
+            "money_out_pence": 0,
+            "running_balance_pence": 40000,
+        },
+    ]
+    assert projection["total_income_pence"] == 30000
+    assert projection["closing_balance_pence"] == 40000

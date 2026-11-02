@@ -46,11 +46,11 @@ def _variable_weekly_entries(
     start_date: date,
     end_date: date,
 ) -> list[dict[str, Any]]:
-    """Accrue a monthly variable budget daily and group it into calendar weeks.
+    """Accrue a monthly variable budget daily and group it into four buckets.
 
-    Weeks run Monday to Sunday. Each weekly entry is dated on its Sunday,
-    except for the final partial week of the projection, which is dated on
-    the projection end date.
+    The first three buckets cover days 1-7, 8-14 and 15-21. The fourth
+    bucket covers the rest of the month. Each entry is dated on its bucket
+    end, except when the projection ends earlier.
 
     Integer arithmetic distributes every penny across the days of each
     month without losing or creating money.
@@ -59,7 +59,7 @@ def _variable_weekly_entries(
     if monthly_amount_pence <= 0:
         return []
 
-    weekly_totals: dict[date, int] = {}
+    bucket_totals: dict[date, int] = {}
     current = start_date
 
     while current <= end_date:
@@ -74,22 +74,26 @@ def _variable_weekly_entries(
         allocated_after = (monthly_amount_pence * (day_index + 1)) // days_in_month
         daily_amount = allocated_after - allocated_before
 
-        week_ending = current + timedelta(days=6 - current.weekday())
-        week_ending = min(week_ending, end_date)
+        bucket_index = min((current.day - 1) // 7, 3)
+        bucket_end_day = days_in_month if bucket_index == 3 else (bucket_index + 1) * 7
+        bucket_ending = date(current.year, current.month, bucket_end_day)
+        bucket_ending = min(bucket_ending, end_date)
 
-        weekly_totals[week_ending] = weekly_totals.get(week_ending, 0) + daily_amount
+        bucket_totals[bucket_ending] = (
+            bucket_totals.get(bucket_ending, 0) + daily_amount
+        )
 
         current += timedelta(days=1)
 
     return [
         {
-            "date": week_ending,
+            "date": bucket_ending,
             "type": "variable_expense",
             "description": expense["name"],
             "amount_pence": -amount,
             "source_id": int(expense["id"]),
         }
-        for week_ending, amount in sorted(weekly_totals.items())
+        for bucket_ending, amount in sorted(bucket_totals.items())
         if amount
     ]
 
@@ -104,7 +108,7 @@ def generate_cashflow_projection(
     the same calendar date after the configured number of months.
 
     Variable expense budgets accrue evenly across the days of each calendar
-    month and are grouped into Monday-to-Sunday forecast entries. Debt
+    month and are grouped into four month-local forecast entries. Debt
     repayments are capped at the outstanding balance; interest is not modelled
     because the current debt schema has no interest-rate field.
     """
