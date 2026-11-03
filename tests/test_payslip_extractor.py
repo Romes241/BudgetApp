@@ -53,6 +53,65 @@ NEST PENSION DEDUCTION £22.10
 Total £146.59
 """
 
+COLUMNAR_SAMPLE = """
+Gross Pay
+£675.77
+YTD £14,795.52
+PAYE Tax
+£90.84
+YTD £1,627.71
+NIC
+£34.70
+YTD £604.11
+Net Pay
+£528.00
+YTD £12,103.89
+PAYMENTS - EMPLOYEE DEFAULT POST
+Description
+Holiday Pay - Associates
+Associate Monthly Bonus
+Enhanced Overnight Payment Per Hr
+Basic Pay - associates
+21/10/2026 - 21/10/2026
+Basic Pay - associates
+22/10/2026 - 22/10/2026
+Basic Pay - associates
+23/10/2026 - 23/10/2026
+Basic Pay - associates
+25/10/2026 - 25/10/2026
+Units
+7.92
+-
+1.62
+7.95
+9.00
+7.35
+8.72
+Rate
+13.9100
+-
+1.0000
+13.9100
+13.9100
+13.9100
+13.9100
+Amount
+110.17
+104.67
+1.62
+110.58
+125.19
+102.24
+121.30
+Total £675.77
+DEDUCTIONS - EMPLOYEE DEFAULT POST
+Description Amount
+Tax Paid £90.84
+NI Contracted In £34.70
+NEST PENSION DEDUCTION £22.23
+Total £147.77
+"""
+
 
 def test_extracts_current_period_summary():
     result = extract_payslip_text(SAMPLE)
@@ -83,6 +142,74 @@ def test_extracts_all_earnings_lines():
 def test_validates_totals():
     result = extract_payslip_text(SAMPLE)
 
+    assert result.warnings == []
+
+
+def test_extracts_columnar_payment_lines():
+    result = extract_payslip_text(COLUMNAR_SAMPLE)
+
+    assert len(result.earnings) == 7
+    assert result.earnings[0].description == "Holiday Pay - Associates"
+    assert result.earnings[1].description == "Associate Monthly Bonus"
+    assert result.earnings[1].units is None
+    assert result.earnings[1].rate is None
+    assert result.earnings[1].amount == Decimal("104.67")
+    assert result.warnings == []
+
+
+def test_extracts_inline_and_wrapped_payment_lines_with_inline_summaries():
+    text = """
+Gross Pay
+£675.77
+YTD £14,795.52
+PAYE Tax £90.84
+YTD £1,627.71
+NIC £34.70
+YTD £604.11
+Others £22.23
+YTD £459.81
+Net Pay £528.00
+YTD £12,103.89
+PAYMENTS - EMPLOYEE DEFAULT POST
+Description Units Rate Amount
+Holiday Pay - Associates 7.92 13.9100 110.17
+Associate Monthly Bonus - - 104.67
+Enhanced Overnight
+Payment Per Hr
+1.62 1.0000 1.62
+Basic Pay - associates
+21/10/2026 - 21/10/2026
+7.95 13.9100 110.58
+Basic Pay - associates
+22/10/2026 - 22/10/2026
+9.00 13.9100 125.19
+Basic Pay - associates
+23/10/2026 - 23/10/2026
+7.35 13.9100 102.24
+Basic Pay - associates
+25/10/2026 - 25/10/2026
+8.72 13.9100 121.30
+Total £675.77
+DEDUCTIONS - EMPLOYEE DEFAULT POST
+Description Amount
+Tax Paid 90.84
+NI Contracted In 34.70
+NEST PENSION DEDUCTION 22.23
+Total £147.77
+MESSAGES CUMULATIVE YEAR TO DATE Amount
+"""
+
+    result = extract_payslip_text(text)
+
+    assert result.gross_pay == Decimal("675.77")
+    assert result.tax_paid == Decimal("90.84")
+    assert result.ni_paid == Decimal("34.70")
+    assert result.pension_paid == Decimal("22.23")
+    assert result.other_deductions == Decimal("0.00")
+    assert result.net_pay == Decimal("528.00")
+    assert len(result.earnings) == 7
+    assert result.earnings[2].description == "Enhanced Overnight Payment Per Hr"
+    assert result.earnings[-1].amount == Decimal("121.30")
     assert result.warnings == []
 
 
