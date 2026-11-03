@@ -139,3 +139,19 @@ def deactivate_variable_expense(expense_id: int) -> bool:
         )
 
         return cursor.rowcount > 0
+
+
+def reactivate_variable_expense(expense_id: int) -> bool:
+    """Mark a variable expense as active again."""
+
+    with database_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE variable_expenses
+            SET active = 1
+            WHERE id = ?
+            """,
+            (expense_id,),
+        )
+
+        return cursor.rowcount > 0

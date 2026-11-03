@@ -6,6 +6,7 @@ from budget_app.services.variable_expense_service import (
     deactivate_variable_expense,
     get_variable_expense,
     get_variable_expenses,
+    reactivate_variable_expense,
     update_variable_expense,
 )
 
@@ -175,3 +176,35 @@ def test_variable_expense_persists_after_reopening_database(database):
 
     assert expense["name"] == "Groceries"
     assert expense["monthly_amount_pence"] == 25000
+
+
+def test_reactivate_variable_expense(database):
+    expense_id = add_variable_expense("Groceries", 250)
+
+    deactivate_variable_expense(expense_id)
+
+    assert reactivate_variable_expense(expense_id) is True
+
+    expense = get_variable_expense(expense_id)
+
+    assert expense is not None
+    assert expense["active"] == 1
+    assert expense in get_variable_expenses()
+
+
+def test_reactivate_returns_false_for_missing_expense(database):
+    assert reactivate_variable_expense(999) is False
+
+
+def test_reactivate_preserves_expense_details(database):
+    expense_id = add_variable_expense("Groceries", 250)
+
+    deactivate_variable_expense(expense_id)
+    reactivate_variable_expense(expense_id)
+
+    expense = get_variable_expense(expense_id)
+
+    assert expense["name"] == "Groceries"
+    assert expense["monthly_amount_pence"] == 25000
+    assert expense["monthly_amount"] == 250
+    assert expense["active"] == 1
