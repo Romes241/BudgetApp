@@ -38,6 +38,7 @@ def configure_settings(
     average_hours=20,
     pay_frequency="weekly",
     next_pay_date="2026-11-06",
+    early_payment_offset_days=1,
 ):
     with connect_database(database_path) as connection:
         connection.execute(
@@ -46,7 +47,8 @@ def configure_settings(
             SET hourly_wage_pence = ?,
                 average_hours = ?,
                 pay_frequency = ?,
-                next_pay_date = ?
+                next_pay_date = ?,
+                early_payment_offset_days = ?
             WHERE id = 1
             """,
             (
@@ -54,6 +56,7 @@ def configure_settings(
                 average_hours,
                 pay_frequency,
                 next_pay_date,
+                early_payment_offset_days,
             ),
         )
 
@@ -403,19 +406,19 @@ def test_settings_forecast_falls_back_to_gross_wage_estimate(
         (
             "weekly",
             [
-                date(2026, 11, 6),
-                date(2026, 11, 13),
-                date(2026, 11, 20),
-                date(2026, 11, 27),
+                date(2026, 11, 5),
+                date(2026, 11, 12),
+                date(2026, 11, 19),
+                date(2026, 11, 26),
             ],
         ),
         (
             "fortnightly",
-            [date(2026, 11, 6), date(2026, 11, 20)],
+            [date(2026, 11, 5), date(2026, 11, 19)],
         ),
         (
             "monthly",
-            [date(2026, 11, 6)],
+            [date(2026, 11, 5)],
         ),
     ],
 )
@@ -442,6 +445,45 @@ def test_settings_forecast_generates_pay_dates(
         if entry["type"] == "regular_income"
     ]
     assert actual_dates == expected_dates
+
+
+def test_settings_forecast_can_disable_early_payment_offset(forecast_database):
+    configure_settings(
+        forecast_database,
+        early_payment_offset_days=0,
+    )
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 1),
+        end_date=date(2026, 11, 13),
+    )
+
+    actual_dates = [
+        entry["date"]
+        for entry in result["entries"]
+        if entry["type"] == "regular_income"
+    ]
+
+    assert actual_dates == [date(2026, 11, 6), date(2026, 11, 13)]
+    assert result["early_payment_offset_days"] == 0
+
+
+def test_settings_forecast_shifts_payday_inside_start_date_boundary(
+    forecast_database,
+):
+    configure_settings(forecast_database)
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 5),
+        end_date=date(2026, 11, 5),
+    )
+
+    regular_income = [
+        entry for entry in result["entries"] if entry["type"] == "regular_income"
+    ]
+
+    assert len(regular_income) == 1
+    assert regular_income[0]["date"] == date(2026, 11, 5)
 
 
 def test_settings_forecast_includes_bonus_as_separate_entry(
@@ -505,7 +547,7 @@ def test_monthly_pay_date_clamps_to_last_day_of_short_month(
         if entry["type"] == "regular_income"
     ]
 
-    assert actual_dates == [date(2026, 2, 28), date(2026, 3, 28)]
+    assert actual_dates == [date(2026, 2, 27), date(2026, 3, 27)]
 
 
 def test_settings_forecast_reports_unknown_payment_lines(
@@ -676,9 +718,9 @@ def test_settings_forecast_excludes_dates_with_actual_income(
     ]
 
     assert actual_dates == [
-        date(2026, 11, 6),
-        date(2026, 11, 20),
-        date(2026, 11, 27),
+        date(2026, 11, 5),
+        date(2026, 11, 19),
+        date(2026, 11, 26),
     ]
     assert result["regular_income_pence"] == 67500
     assert result["forecast_diagnostics"]["recorded_pay_dates_excluded"] == 1
@@ -708,9 +750,9 @@ def test_settings_forecast_only_excludes_exact_actual_pay_dates(
     ]
 
     assert actual_dates == [
-        date(2026, 11, 6),
-        date(2026, 11, 13),
-        date(2026, 11, 20),
+        date(2026, 11, 5),
+        date(2026, 11, 12),
+        date(2026, 11, 19),
     ]
     assert result["forecast_diagnostics"]["recorded_pay_dates_excluded"] == 0
 

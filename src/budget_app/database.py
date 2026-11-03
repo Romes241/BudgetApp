@@ -6,7 +6,7 @@ from pathlib import Path
 
 from budget_app.paths import get_database_path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 SCHEMA_SQL = """
@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS settings (
         CHECK (projection_months BETWEEN 1 AND 120),
     pay_frequency TEXT NOT NULL DEFAULT 'weekly'
         CHECK (pay_frequency IN ('weekly', 'fortnightly', 'monthly')),
-    next_pay_date TEXT
+    next_pay_date TEXT,
+    early_payment_offset_days INTEGER NOT NULL DEFAULT 1
+        CHECK (early_payment_offset_days BETWEEN 0 AND 7)
 );
 
 CREATE TABLE IF NOT EXISTS income_history (
@@ -370,6 +372,21 @@ def _migrate_to_v4(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_to_v5(connection: sqlite3.Connection) -> None:
+    """Add the early-payment offset used by cashflow forecasting."""
+
+    settings_columns = _table_columns(connection, "settings")
+
+    if "early_payment_offset_days" not in settings_columns:
+        connection.execute(
+            """
+            ALTER TABLE settings
+            ADD COLUMN early_payment_offset_days INTEGER NOT NULL DEFAULT 1
+                CHECK (early_payment_offset_days BETWEEN 0 AND 7)
+            """
+        )
+
+
 def initialise_database(
     connection: sqlite3.Connection,
 ) -> None:
@@ -385,6 +402,7 @@ def initialise_database(
         )
 
     connection.execute("BEGIN")
+
     try:
         # Execute statements individually; executescript can implicitly commit.
         for statement in SCHEMA_SQL.split(";"):
@@ -400,9 +418,13 @@ def initialise_database(
         if current_version < 4:
             _migrate_to_v4(connection)
 
+        if current_version < 5:
+            _migrate_to_v5(connection)
+
         connection.execute("INSERT OR IGNORE INTO settings (id) VALUES (1)")
         connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         connection.commit()
+
     except Exception:
         connection.rollback()
         raise
@@ -413,11 +435,14 @@ def database_connection(database_path: str | Path | None = None):
     """Manage a database connection and always close it."""
 
     connection = connect_database(database_path)
+
     try:
         yield connection
         connection.commit()
+
     except Exception:
         connection.rollback()
         raise
+
     finally:
         connection.close()

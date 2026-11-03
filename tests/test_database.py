@@ -48,6 +48,7 @@ def test_initialise_creates_default_settings(tmp_path):
         assert settings is not None
         assert settings["current_balance_pence"] == 0
         assert settings["projection_months"] == 12
+        assert settings["early_payment_offset_days"] == 1
 
 
 def test_initialise_is_safe_to_repeat(tmp_path):
@@ -274,7 +275,7 @@ def test_migration_updates_schema_version(tmp_path):
 
         version = connection.execute("PRAGMA user_version").fetchone()[0]
 
-        assert version == SCHEMA_VERSION == 4
+        assert version == SCHEMA_VERSION == 5
 
 
 def test_migration_is_safe_to_repeat(tmp_path):
@@ -294,6 +295,70 @@ def test_migration_is_safe_to_repeat(tmp_path):
         ).fetchone()[0]
 
         assert count == 1
+
+
+def create_version_four_database(database_path):
+    """Create a schema-v4 settings table without early-payday configuration."""
+
+    with connect_database(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                current_balance_pence INTEGER NOT NULL DEFAULT 0,
+                hourly_wage_pence INTEGER NOT NULL DEFAULT 0,
+                average_hours REAL NOT NULL DEFAULT 0,
+                tax_code TEXT NOT NULL DEFAULT '1257L',
+                pension_percent REAL NOT NULL DEFAULT 0,
+                student_loan_plan TEXT NOT NULL DEFAULT 'None',
+                ni_category TEXT NOT NULL DEFAULT 'A',
+                scottish_taxpayer INTEGER NOT NULL DEFAULT 1,
+                projection_months INTEGER NOT NULL DEFAULT 12,
+                pay_frequency TEXT NOT NULL DEFAULT 'weekly',
+                next_pay_date TEXT
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO settings (id, pay_frequency, next_pay_date)
+            VALUES (1, 'weekly', '2026-11-06')
+            """
+        )
+        connection.execute("PRAGMA user_version = 4")
+
+
+def test_version_four_migration_adds_early_payment_offset(tmp_path):
+    database_path = tmp_path / "legacy_v4.db"
+    create_version_four_database(database_path)
+
+    with connect_database(database_path) as connection:
+        initialise_database(connection)
+
+        settings = connection.execute(
+            """
+            SELECT pay_frequency, next_pay_date, early_payment_offset_days
+            FROM settings
+            WHERE id = 1
+            """
+        ).fetchone()
+
+        assert settings["pay_frequency"] == "weekly"
+        assert settings["next_pay_date"] == "2026-11-06"
+        assert settings["early_payment_offset_days"] == 1
+
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        assert version == SCHEMA_VERSION == 5
+
+
+def test_early_payment_offset_rejects_values_outside_supported_range(tmp_path):
+    with connect_database(tmp_path / "test.db") as connection:
+        initialise_database(connection)
+
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "UPDATE settings SET early_payment_offset_days = 8 WHERE id = 1"
+            )
 
 
 def test_payment_line_requires_existing_income(tmp_path):

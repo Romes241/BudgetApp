@@ -216,7 +216,7 @@ def test_v4_migration_preserves_indexes_and_foreign_key(tmp_path):
         assert violations == []
 
 
-def test_v3_migration_sets_schema_version_to_four(tmp_path):
+def test_v3_migration_sets_schema_version_to_five(tmp_path):
     database_path = tmp_path / "legacy_v3.db"
     create_version_three_database(database_path)
 
@@ -225,10 +225,10 @@ def test_v3_migration_sets_schema_version_to_four(tmp_path):
 
         version = connection.execute("PRAGMA user_version").fetchone()[0]
 
-        assert version == SCHEMA_VERSION == 4
+        assert version == SCHEMA_VERSION == 5
 
 
-def test_v4_migration_is_safe_to_repeat(tmp_path):
+def test_v5_migration_is_safe_to_repeat(tmp_path):
     database_path = tmp_path / "legacy_v3.db"
     create_version_three_database(database_path)
 
@@ -244,4 +244,4 @@ def test_v4_migration_is_safe_to_repeat(tmp_path):
 
         version = connection.execute("PRAGMA user_version").fetchone()[0]
 
-        assert version == 4
+        assert version == 5
