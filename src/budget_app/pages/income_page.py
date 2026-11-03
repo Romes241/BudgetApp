@@ -183,7 +183,8 @@ class IncomeDialog(QDialog):
 
         numeric_fields = [("Hours worked", self.hours_input)]
         numeric_fields.extend(
-            (label, self.money_inputs[field_name]) for label, field_name in self.MONEY_FIELDS
+            (label, self.money_inputs[field_name])
+            for label, field_name in self.MONEY_FIELDS
         )
         numeric_fields.append(("Bonus amount", self.bonus_amount_input))
 
@@ -213,7 +214,10 @@ class IncomeDialog(QDialog):
 
         if self.has_bonus_input.isChecked():
             reason = self.bonus_reason_input.text().strip()
-            if self._preserve_null_bonus_amount and self.bonus_amount_input.value() == 0:
+            if (
+                self._preserve_null_bonus_amount
+                and self.bonus_amount_input.value() == 0
+            ):
                 values["bonus_amount"] = None
             else:
                 values["bonus_amount"] = Decimal(str(self.bonus_amount_input.value()))
@@ -287,6 +291,7 @@ class IncomePage(QWidget):
         self.edit_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.edit_button.clicked.connect(self.edit_record)
         self.edit_button.setEnabled(False)
+        self.edit_button.setToolTip("Select an income record to edit.")
 
         self.delete_button = QPushButton("Delete")
         self.delete_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -435,9 +440,24 @@ class IncomePage(QWidget):
         )
 
     def _update_action_buttons(self) -> None:
-        has_selection = self._selected_record() is not None
-        self.edit_button.setEnabled(has_selection)
+        record = self._selected_record()
+        has_selection = record is not None
+
         self.delete_button.setEnabled(has_selection)
+
+        if not has_selection:
+            self.edit_button.setEnabled(False)
+            self.edit_button.setToolTip("Select an income record to edit.")
+            return
+
+        if record.get("source_file"):
+            self.edit_button.setEnabled(False)
+            self.edit_button.setToolTip(
+                "Imported payslip records cannot currently be edited."
+            )
+        else:
+            self.edit_button.setEnabled(True)
+            self.edit_button.setToolTip("Edit the selected income record.")
 
     def add_record(self) -> None:
         dialog = IncomeDialog(parent=self)
