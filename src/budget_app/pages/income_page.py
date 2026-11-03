@@ -53,6 +53,7 @@ class IncomeDialog(QDialog):
         super().__init__(parent)
 
         self.income = income
+        self._preserve_null_bonus_amount = False
         self.setWindowTitle("Edit income record" if income else "Add income record")
         self.setMinimumWidth(440)
 
@@ -117,6 +118,7 @@ class IncomeDialog(QDialog):
         bonus_form.setSpacing(10)
 
         self.bonus_amount_input = self._create_money_input()
+        self.bonus_amount_input.valueChanged.connect(self._on_bonus_amount_changed)
         self.bonus_reason_input = QLineEdit()
         self.bonus_reason_input.setPlaceholderText("e.g. Performance bonus")
 
@@ -143,6 +145,12 @@ class IncomeDialog(QDialog):
         self.bonus_amount_input.setEnabled(enabled)
         self.bonus_reason_input.setEnabled(enabled)
 
+        if not enabled:
+            self._preserve_null_bonus_amount = False
+
+    def _on_bonus_amount_changed(self, _value: float) -> None:
+        self._preserve_null_bonus_amount = False
+
     def _populate_fields(self) -> None:
         pay_date = QDate.fromString(self.income["pay_date"], "yyyy-MM-dd")
 
@@ -155,19 +163,35 @@ class IncomeDialog(QDialog):
             field.setValue(float(self.income[field_name]))
 
         bonus_amount = self.income["bonus_amount"]
-        has_bonus = bonus_amount is not None
+        bonus_reason = self.income["bonus_reason"] or ""
+        has_bonus = bonus_amount is not None or bool(bonus_reason)
         self.has_bonus_input.setChecked(has_bonus)
+        self._preserve_null_bonus_amount = (
+            has_bonus and bonus_amount is None and bool(bonus_reason)
+        )
 
         if has_bonus:
-            self.bonus_amount_input.setValue(float(bonus_amount))
+            self.bonus_amount_input.setValue(float(bonus_amount or 0))
 
-        self.bonus_reason_input.setText(self.income["bonus_reason"] or "")
+        self.bonus_reason_input.setText(bonus_reason)
 
     def _validate_and_accept(self) -> None:
         if not self.pay_date_input.date().isValid():
             self.error_label.setText("Please enter a valid pay date.")
             self.pay_date_input.setFocus()
             return
+
+        numeric_fields = [("Hours worked", self.hours_input)]
+        numeric_fields.extend(
+            (label, self.money_inputs[field_name]) for label, field_name in self.MONEY_FIELDS
+        )
+        numeric_fields.append(("Bonus amount", self.bonus_amount_input))
+
+        for label, field in numeric_fields:
+            if field.isEnabled() and not field.hasAcceptableInput():
+                self.error_label.setText(f"Please enter a valid value for {label}.")
+                field.setFocus()
+                return
 
         self.error_label.clear()
         self.accept()
@@ -188,8 +212,11 @@ class IncomeDialog(QDialog):
         )
 
         if self.has_bonus_input.isChecked():
-            values["bonus_amount"] = Decimal(str(self.bonus_amount_input.value()))
             reason = self.bonus_reason_input.text().strip()
+            if self._preserve_null_bonus_amount and self.bonus_amount_input.value() == 0:
+                values["bonus_amount"] = None
+            else:
+                values["bonus_amount"] = Decimal(str(self.bonus_amount_input.value()))
             values["bonus_reason"] = reason or None
         else:
             values["bonus_amount"] = None
@@ -306,11 +333,12 @@ class IncomePage(QWidget):
         self.status_label.setObjectName("secondaryText")
         main_layout.addWidget(self.status_label)
 
-    def refresh_income(self) -> None:
+    def refresh_income(self) -> bool:
         """Reload income history from the service."""
 
         self.refresh_button.setEnabled(False)
         self.refresh_button.setText("Refreshing...")
+        success = False
 
         try:
             self.income_records = get_income_history()
@@ -320,6 +348,7 @@ class IncomePage(QWidget):
             self.status_label.setText(
                 f"{count} income record{'s' if count != 1 else ''}"
             )
+            success = True
 
         except (
             ValueError,
@@ -339,6 +368,8 @@ class IncomePage(QWidget):
         finally:
             self.refresh_button.setEnabled(True)
             self.refresh_button.setText("Refresh")
+
+        return success
 
     def _populate_table(self) -> None:
         self.income_table.setRowCount(len(self.income_records))
@@ -416,8 +447,8 @@ class IncomePage(QWidget):
 
         try:
             add_income(**dialog.get_values())
-            self.refresh_income()
-            self.status_label.setText("Income record added successfully.")
+            if self.refresh_income():
+                self.status_label.setText("Income record added successfully.")
 
         except (
             ValueError,
@@ -437,6 +468,14 @@ class IncomePage(QWidget):
         record = self._selected_record()
 
         if record is None:
+            return
+
+        if record.get("source_file"):
+            QMessageBox.information(
+                self,
+                "Imported record",
+                "Imported payslip income records cannot be edited.",
+            )
             return
 
         dialog = IncomeDialog(income=record, parent=self)
@@ -460,8 +499,8 @@ class IncomePage(QWidget):
                 self.refresh_income()
                 return
 
-            self.refresh_income()
-            self.status_label.setText("Income record updated successfully.")
+            if self.refresh_income():
+                self.status_label.setText("Income record updated successfully.")
 
         except (
             ValueError,
@@ -509,8 +548,8 @@ class IncomePage(QWidget):
                 self.refresh_income()
                 return
 
-            self.refresh_income()
-            self.status_label.setText("Income record deleted successfully.")
+            if self.refresh_income():
+                self.status_label.setText("Income record deleted successfully.")
 
         except (
             ValueError,
