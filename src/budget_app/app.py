@@ -21,6 +21,7 @@ from budget_app import __version__
 from budget_app.database import connect_database, initialise_database
 from budget_app.pages.cashflow_page import CashflowPage
 from budget_app.pages.fixed_expenses_page import FixedExpensesPage
+from budget_app.pages.income_page import IncomePage
 from budget_app.pages.variable_expenses_page import VariableExpensesPage
 
 
@@ -82,10 +83,12 @@ class MainWindow(QMainWindow):
         cashflow_page = CashflowPage()
         fixed_expenses_page = FixedExpensesPage()
         variable_expenses_page = VariableExpensesPage()
+        income_page = IncomePage()
         self.page_stack.addWidget(dashboard_page)
         self.page_stack.addWidget(cashflow_page)
         self.page_stack.addWidget(fixed_expenses_page)
         self.page_stack.addWidget(variable_expenses_page)
+        self.page_stack.addWidget(income_page)
 
         self._add_navigation_button(
             sidebar_layout,
@@ -106,6 +109,11 @@ class MainWindow(QMainWindow):
             sidebar_layout,
             "Variable Expenses",
             variable_expenses_page,
+        )
+        self._add_navigation_button(
+            sidebar_layout,
+            "Income",
+            income_page,
         )
         sidebar_layout.addStretch()
 
