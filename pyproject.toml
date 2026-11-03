@@ -28,7 +28,7 @@ budgetapp = "budget_app.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-budget_app = ["styles/theme.qss"]
+budget_app = ["styles/theme.qss", "styles/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

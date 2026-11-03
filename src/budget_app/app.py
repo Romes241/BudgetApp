@@ -23,6 +23,7 @@ from budget_app.pages.cashflow_page import CashflowPage
 from budget_app.pages.fixed_expenses_page import FixedExpensesPage
 from budget_app.pages.income_page import IncomePage
 from budget_app.pages.payslip_import_page import PayslipImportPage
+from budget_app.pages.settings_page import SettingsPage
 from budget_app.pages.variable_expenses_page import VariableExpensesPage
 
 
@@ -86,12 +87,16 @@ class MainWindow(QMainWindow):
         variable_expenses_page = VariableExpensesPage()
         income_page = IncomePage()
         payslip_import_page = PayslipImportPage(income_page=income_page)
+        settings_page = SettingsPage()
+        settings_page.settings_saved.connect(cashflow_page.refresh_projection)
+
         self.page_stack.addWidget(dashboard_page)
         self.page_stack.addWidget(cashflow_page)
         self.page_stack.addWidget(fixed_expenses_page)
         self.page_stack.addWidget(variable_expenses_page)
         self.page_stack.addWidget(income_page)
         self.page_stack.addWidget(payslip_import_page)
+        self.page_stack.addWidget(settings_page)
 
         self._add_navigation_button(
             sidebar_layout,
@@ -122,6 +127,11 @@ class MainWindow(QMainWindow):
             sidebar_layout,
             "Payslip Import",
             payslip_import_page,
+        )
+        self._add_navigation_button(
+            sidebar_layout,
+            "Settings",
+            settings_page,
         )
         sidebar_layout.addStretch()
 
