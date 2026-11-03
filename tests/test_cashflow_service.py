@@ -6,7 +6,11 @@ from budget_app.database import connect_database, initialise_database
 from budget_app.services import cashflow_service
 from budget_app.services.debt_service import add_debt
 from budget_app.services.fixed_expense_service import add_fixed_expense
-from budget_app.services.variable_expense_service import add_variable_expense
+from budget_app.services.variable_expense_service import (
+    add_variable_expense,
+    deactivate_variable_expense,
+    reactivate_variable_expense,
+)
 
 
 @pytest.fixture
@@ -294,3 +298,38 @@ def test_projection_maps_forecast_income_entries_and_running_balance(
     ]
     assert projection["total_income_pence"] == 30000
     assert projection["closing_balance_pence"] == 40000
+
+
+def test_deactivated_variable_expense_is_excluded_and_reactivated_expense_is_projected(
+    cashflow_database,
+):
+    set_settings(cashflow_database)
+    expense_id = add_variable_expense("Groceries", "100.00")
+
+    # Deactivated expenses should not appear in the projection.
+    assert deactivate_variable_expense(expense_id) is True
+
+    inactive_projection = cashflow_service.generate_cashflow_projection(
+        date(2026, 11, 1)
+    )
+
+    inactive_allocations = [
+        entry
+        for entry in inactive_projection["entries"]
+        if entry["type"] == "variable_expense"
+    ]
+
+    assert inactive_allocations == []
+
+    # Reactivated expenses should be included again.
+    assert reactivate_variable_expense(expense_id) is True
+
+    active_projection = cashflow_service.generate_cashflow_projection(date(2026, 11, 1))
+
+    active_allocations = [
+        entry
+        for entry in active_projection["entries"]
+        if entry["type"] == "variable_expense"
+    ]
+
+    assert sum(entry["money_out_pence"] for entry in active_allocations) == 10000
