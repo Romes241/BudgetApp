@@ -39,6 +39,7 @@ class PayslipImportPreview:
 
 def _basic_hours(earnings: list[EarningsLine]) -> Decimal:
     """Calculate worked hours from Basic Pay lines only."""
+
     return sum(
         (
             line.units
@@ -51,6 +52,7 @@ def _basic_hours(earnings: list[EarningsLine]) -> Decimal:
 
 def validate_payslip(data: PayslipData) -> list[str]:
     """Return errors that prevent safe import of the payslip."""
+
     errors = list(data.warnings)
 
     if not data.source_hash:
@@ -80,9 +82,14 @@ def validate_payslip(data: PayslipData) -> list[str]:
     for index, line in enumerate(data.earnings, start=1):
         if not line.description.strip():
             errors.append(f"Earnings line {index} has no description.")
+
         if not line.amount.is_finite() or line.amount < 0:
             errors.append(f"Earnings line {index} has an invalid amount.")
-        for label, value in (("units", line.units), ("rate", line.rate)):
+
+        for label, value in (
+            ("units", line.units),
+            ("rate", line.rate),
+        ):
             if value is not None and (not value.is_finite() or value < 0):
                 errors.append(
                     f"Earnings line {index} {label} must be finite and non-negative."
@@ -93,6 +100,7 @@ def validate_payslip(data: PayslipData) -> list[str]:
             (line.amount for line in data.earnings),
             start=Decimal("0.00"),
         )
+
         if line_total != data.gross_pay:
             errors.append(
                 f"Earnings total £{line_total} does not match "
@@ -111,7 +119,11 @@ def validate_payslip(data: PayslipData) -> list[str]:
         and data.net_pay is not None
         and all(amount is not None for amount in amounts)
     ):
-        expected_net = data.gross_pay - sum(amounts, start=Decimal("0.00"))
+        expected_net = data.gross_pay - sum(
+            amounts,
+            start=Decimal("0.00"),
+        )
+
         if expected_net != data.net_pay:
             errors.append(
                 f"Expected net pay £{expected_net}, "
@@ -125,6 +137,7 @@ def preview_payslip_import(
     path: str | Path,
 ) -> PayslipImportPreview:
     """Extract a payslip and validate it without changing the database."""
+
     data = extract_payslip_pdf(path)
     errors = validate_payslip(data)
 
@@ -137,33 +150,67 @@ def preview_payslip_import(
 
 def _classification(description: str) -> str:
     """Infer a conservative payment-line classification."""
+
     normalised = description.casefold()
 
     if "bonus" in normalised:
         return "bonus"
+
     if "holiday" in normalised:
         return "holiday"
+
     if "basic pay" in normalised:
         return "regular"
+
     if "enhanced" in normalised or "overtime" in normalised:
         return "additional"
 
     return "unknown"
 
 
-def _reconcile_inserted_income(connection: sqlite3.Connection, income_id: int) -> dict:
+def _bonus_amount(earnings: list[EarningsLine]) -> Decimal | None:
+    """Return the combined amount of all bonus-classified earnings lines."""
+
+    bonus_lines = [
+        line for line in earnings if _classification(line.description) == "bonus"
+    ]
+
+    if not bonus_lines:
+        return None
+
+    return sum(
+        (line.amount for line in bonus_lines),
+        start=Decimal("0.00"),
+    )
+
+
+def _reconcile_inserted_income(
+    connection: sqlite3.Connection,
+    income_id: int,
+) -> dict:
     """Build a reconciliation report for a just-inserted income row."""
+
     income = connection.execute(
         """
-        SELECT gross_pay_pence, tax_paid_pence, ni_paid_pence,
-               pension_paid_pence, other_deductions_pence, net_pay_pence
+        SELECT
+            gross_pay_pence,
+            tax_paid_pence,
+            ni_paid_pence,
+            pension_paid_pence,
+            other_deductions_pence,
+            net_pay_pence
         FROM income_history
         WHERE id = ?
         """,
         (income_id,),
     ).fetchone()
+
     if income is None:
-        return {"income_id": income_id, "status": "not_found", "checks": []}
+        return {
+            "income_id": income_id,
+            "status": "not_found",
+            "checks": [],
+        }
 
     payment_lines = connection.execute(
         """
@@ -174,6 +221,7 @@ def _reconcile_inserted_income(connection: sqlite3.Connection, income_id: int) -
         """,
         (income_id,),
     ).fetchall()
+
     gross_pence = int(income["gross_pay_pence"])
     checks = []
 
@@ -186,14 +234,16 @@ def _reconcile_inserted_income(connection: sqlite3.Connection, income_id: int) -
                 "actual_pence": None,
                 "difference_pence": None,
                 "message": (
-                    "No payment lines are recorded; the earnings breakdown "
-                    "cannot be reconciled."
+                    "No payment lines are recorded; the earnings "
+                    "breakdown cannot be reconciled."
                 ),
             }
         )
     else:
         lines_total_pence = sum(int(line["amount_pence"]) for line in payment_lines)
+
         difference = lines_total_pence - gross_pence
+
         checks.append(
             {
                 "name": "earnings_total",
@@ -215,9 +265,11 @@ def _reconcile_inserted_income(connection: sqlite3.Connection, income_id: int) -
         + int(income["pension_paid_pence"])
         + int(income["other_deductions_pence"])
     )
+
     expected_net_pence = gross_pence - deductions_pence
     actual_net_pence = int(income["net_pay_pence"])
     net_difference = actual_net_pence - expected_net_pence
+
     checks.append(
         {
             "name": "net_pay",
@@ -234,6 +286,7 @@ def _reconcile_inserted_income(connection: sqlite3.Connection, income_id: int) -
     )
 
     statuses = {check["status"] for check in checks}
+
     if "failed" in statuses:
         overall_status = "failed"
     elif "missing_breakdown" in statuses:
@@ -254,27 +307,51 @@ def import_payslip(
     path: str | Path,
     *,
     confirmed: bool = False,
+    reviewed_data: PayslipData | None = None,
     database_path: str | Path | None = None,
 ) -> dict[str, int | dict]:
     """Import a validated payslip and return its ID with reconciliation.
 
-    All inserts happen in one transaction. The caller must explicitly
-    confirm the import after reviewing the preview.
+    If reviewed_data is provided, the user's corrected values are imported
+    instead of the original extracted values.
+
+    The source PDF is re-read before importing to ensure that it has not
+    changed since the review was performed.
+
+    All database inserts happen in one transaction. The caller must
+    explicitly confirm the import after reviewing the payslip.
     """
+
     if not confirmed:
         raise PayslipValidationError(
             "Import not confirmed. Preview and review the payslip first."
         )
 
     pdf_path = Path(path)
-    preview = preview_payslip_import(pdf_path)
 
-    if not preview.valid:
+    # Extract the original data and obtain the current source hash.
+    # The extractor handles reading and validating access to the PDF.
+    extracted_data = extract_payslip_pdf(pdf_path)
+
+    if reviewed_data is not None:
+        # Prevent importing corrections against a different or modified PDF.
+        if reviewed_data.source_hash != extracted_data.source_hash:
+            raise PayslipValidationError(
+                "The selected payslip changed after it was reviewed. "
+                "Please review it again."
+            )
+
+        data = reviewed_data
+    else:
+        data = extracted_data
+
+    # Validate the values that will actually be imported.
+    errors = validate_payslip(data)
+
+    if errors:
         raise PayslipValidationError(
-            "Payslip cannot be imported:\n- " + "\n- ".join(preview.errors)
+            "Payslip cannot be imported:\n- " + "\n- ".join(errors)
         )
-
-    data = preview.data
 
     assert data.source_hash is not None
     assert data.pay_date is not None
@@ -286,6 +363,7 @@ def import_payslip(
     assert data.net_pay is not None
 
     hours_worked = _basic_hours(data.earnings)
+    bonus_amount = _bonus_amount(data.earnings)
     source_file = pdf_path.name
 
     try:
@@ -319,7 +397,7 @@ def import_payslip(
                     bonus_amount_pence,
                     bonus_reason
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
                 """,
                 (
                     data.pay_date,
@@ -331,12 +409,15 @@ def import_payslip(
                     to_pence(data.net_pay),
                     source_file,
                     to_pence(data.other_deductions),
+                    (to_pence(bonus_amount) if bonus_amount is not None else None),
                 ),
             )
+
             income_id = cursor.lastrowid
 
             for line in data.earnings:
                 units = float(line.units) if line.units is not None else None
+
                 rate_pence = to_pence(line.rate) if line.rate is not None else None
 
                 connection.execute(
@@ -370,10 +451,17 @@ def import_payslip(
                 )
                 VALUES (?, ?, ?)
                 """,
-                (data.source_hash, source_file, income_id),
+                (
+                    data.source_hash,
+                    source_file,
+                    income_id,
+                ),
             )
 
-            reconciliation = _reconcile_inserted_income(connection, income_id)
+            reconciliation = _reconcile_inserted_income(
+                connection,
+                income_id,
+            )
 
             return {
                 "income_id": income_id,
@@ -385,4 +473,5 @@ def import_payslip(
             raise DuplicatePayslipError(
                 "This exact payslip file has already been imported."
             ) from exc
+
         raise

@@ -1,4 +1,5 @@
 import sqlite3
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -174,3 +175,78 @@ def test_payment_line_failure_rolls_back_entire_import(
     assert table_count(database_path, "income_history") == 0
     assert table_count(database_path, "income_payment_lines") == 0
     assert table_count(database_path, "imported_payslips") == 0
+
+
+def test_import_uses_reviewed_values_and_preserves_payment_lines(
+    database_path,
+    extracted_data,
+):
+    reviewed = replace(
+        extracted_data,
+        gross_pay=Decimal("120.00"),
+        net_pay=Decimal("100.00"),
+        earnings=[
+            EarningsLine(
+                description="Basic Pay",
+                units=Decimal(12),
+                rate=Decimal("10.00"),
+                amount=Decimal("120.00"),
+            )
+        ],
+        warnings=[],
+    )
+
+    result = import_payslip(
+        "sample.pdf",
+        confirmed=True,
+        reviewed_data=reviewed,
+        database_path=database_path,
+    )
+
+    with connect_database(database_path) as connection:
+        income = connection.execute(
+            """
+            SELECT gross_pay_pence, net_pay_pence
+            FROM income_history
+            WHERE id = ?
+            """,
+            (result["income_id"],),
+        ).fetchone()
+
+        line = connection.execute(
+            """
+            SELECT description, amount_pence
+            FROM income_payment_lines
+            WHERE income_id = ?
+            """,
+            (result["income_id"],),
+        ).fetchone()
+
+    assert income["gross_pay_pence"] == 12000
+    assert income["net_pay_pence"] == 10000
+    assert line["description"] == "Basic Pay"
+    assert line["amount_pence"] == 12000
+    assert result["reconciliation"]["status"] == "passed"
+
+
+def test_import_rejects_reviewed_data_for_changed_source_hash(
+    database_path,
+    extracted_data,
+):
+    reviewed = replace(
+        extracted_data,
+        source_hash="different-file-hash",
+    )
+
+    with pytest.raises(
+        PayslipValidationError,
+        match="changed after it was reviewed",
+    ):
+        import_payslip(
+            "sample.pdf",
+            confirmed=True,
+            reviewed_data=reviewed,
+            database_path=database_path,
+        )
+
+    assert table_count(database_path, "income_history") == 0
