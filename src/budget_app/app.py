@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from budget_app import __version__
 from budget_app.database import connect_database, initialise_database
 from budget_app.pages.cashflow_page import CashflowPage
+from budget_app.pages.debt_page import DebtPage
 from budget_app.pages.fixed_expenses_page import FixedExpensesPage
 from budget_app.pages.income_page import IncomePage
 from budget_app.pages.payslip_import_page import PayslipImportPage
@@ -83,15 +84,18 @@ class MainWindow(QMainWindow):
 
         dashboard_page = self._create_dashboard_page()
         cashflow_page = CashflowPage()
+        debt_page = DebtPage()
+        debt_page.debts_changed.connect(cashflow_page.refresh_projection)
+
         fixed_expenses_page = FixedExpensesPage()
         variable_expenses_page = VariableExpensesPage()
         income_page = IncomePage()
         payslip_import_page = PayslipImportPage(income_page=income_page)
         settings_page = SettingsPage()
-        settings_page.settings_saved.connect(cashflow_page.refresh_projection)
 
         self.page_stack.addWidget(dashboard_page)
         self.page_stack.addWidget(cashflow_page)
+        self.page_stack.addWidget(debt_page)
         self.page_stack.addWidget(fixed_expenses_page)
         self.page_stack.addWidget(variable_expenses_page)
         self.page_stack.addWidget(income_page)
@@ -107,6 +111,11 @@ class MainWindow(QMainWindow):
             sidebar_layout,
             "Cashflow",
             cashflow_page,
+        )
+        self._add_navigation_button(
+            sidebar_layout,
+            "Debt Management",
+            debt_page,
         )
         self._add_navigation_button(
             sidebar_layout,
@@ -133,6 +142,7 @@ class MainWindow(QMainWindow):
             "Settings",
             settings_page,
         )
+
         sidebar_layout.addStretch()
 
         version_label = QLabel(f"Version {__version__}")

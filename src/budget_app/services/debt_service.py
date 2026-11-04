@@ -300,3 +300,19 @@ def deactivate_debt(debt_id: int) -> bool:
         )
 
         return cursor.rowcount > 0
+
+
+def reactivate_debt(debt_id: int) -> bool:
+    """Mark a debt as active again."""
+
+    with database_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE debts
+            SET active = 1
+            WHERE id = ?
+            """,
+            (debt_id,),
+        )
+
+        return cursor.rowcount > 0

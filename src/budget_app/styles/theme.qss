@@ -260,3 +260,18 @@ QScrollArea {
     background-color: transparent;
     border: none;
 }
+
+QProgressBar#debtProgress {
+    background-color: #292333;
+    color: #f1f5f9;
+    border: 1px solid #3b3448;
+    border-radius: 5px;
+    text-align: center;
+    min-width: 88px;
+    max-height: 18px;
+}
+
+QProgressBar#debtProgress::chunk {
+    background-color: #8b5cf6;
+    border-radius: 4px;
+}
