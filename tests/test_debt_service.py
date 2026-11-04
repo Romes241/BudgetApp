@@ -8,6 +8,7 @@ from budget_app.services.debt_service import (
     deactivate_debt,
     get_debt,
     get_debts,
+    reactivate_debt,
     record_debt_payment,
     update_debt,
 )
@@ -327,3 +328,17 @@ def test_debt_persists_after_reopening_database(database):
     assert debt["name"] == "Credit card"
     assert debt["balance_pence"] == 120000
     assert debt["original_balance_pence"] == 150000
+
+
+def test_reactivate_debt(database):
+    debt_id = add_debt("Credit card", 1200, 1500)
+
+    assert deactivate_debt(debt_id) is True
+    assert get_debt(debt_id)["active"] == 0
+
+    assert reactivate_debt(debt_id) is True
+    assert get_debt(debt_id)["active"] == 1
+
+
+def test_reactivate_debt_returns_false_for_missing_debt(database):
+    assert reactivate_debt(999) is False

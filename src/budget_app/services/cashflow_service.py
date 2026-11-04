@@ -109,8 +109,10 @@ def generate_cashflow_projection(
 
     Variable expense budgets accrue evenly across the days of each calendar
     month and are grouped into four month-local forecast entries. Debt
-    repayments are capped at the outstanding balance; interest is not modelled
-    because the current debt schema has no interest-rate field.
+    repayments are capped at the outstanding balance. A debt with a recorded
+    payment date in a calendar month is treated as already paid for that month;
+    the schema currently stores only the latest payment date. Interest is not
+    modelled because the current debt schema has no interest-rate field.
     """
     if start_date is None:
         start_date = date.today()
@@ -118,7 +120,11 @@ def generate_cashflow_projection(
 
     with database_connection() as connection:
         settings = connection.execute(
-            "SELECT current_balance_pence, projection_months FROM settings WHERE id = 1"
+            """
+            SELECT current_balance_pence, projection_months
+            FROM settings
+            WHERE id = 1
+            """
         ).fetchone()
 
     if settings is None:
@@ -181,9 +187,20 @@ def generate_cashflow_projection(
         if due_day is None or monthly_payment <= 0 or remaining_balance <= 0:
             continue
 
+        last_payment_date = debt.get("last_payment_date")
+        last_payment_month = (
+            last_payment_date[:7] if last_payment_date is not None else None
+        )
+
         for month in _month_dates(start_date, end_date):
             if remaining_balance <= 0:
                 break
+
+            # The schema stores only the most recent payment date, not a full
+            # payment ledger. Treat a payment recorded in a calendar month as
+            # that month's scheduled repayment, so it is not projected twice.
+            if last_payment_month == month.strftime("%Y-%m"):
+                continue
 
             due_date = _due_date(month.year, month.month, due_day)
 

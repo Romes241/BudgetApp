@@ -4,7 +4,7 @@ import pytest
 
 from budget_app.database import connect_database, initialise_database
 from budget_app.services import cashflow_service
-from budget_app.services.debt_service import add_debt
+from budget_app.services.debt_service import add_debt, record_debt_payment
 from budget_app.services.fixed_expense_service import add_fixed_expense
 from budget_app.services.variable_expense_service import (
     add_variable_expense,
@@ -333,3 +333,81 @@ def test_deactivated_variable_expense_is_excluded_and_reactivated_expense_is_pro
     ]
 
     assert sum(entry["money_out_pence"] for entry in active_allocations) == 10000
+
+
+def test_recorded_debt_payment_suppresses_scheduled_payment_in_same_month(
+    cashflow_database,
+):
+    set_settings(cashflow_database, months=2)
+
+    debt_id = add_debt(
+        "Credit card",
+        "500.00",
+        "1000.00",
+        "50.00",
+        15,
+    )
+
+    record_debt_payment(
+        debt_id,
+        amount="50.00",
+        payment_date="2026-11-03",
+    )
+
+    projection = cashflow_service.generate_cashflow_projection(date(2026, 11, 1))
+
+    repayments = [
+        entry for entry in projection["entries"] if entry["type"] == "debt_repayment"
+    ]
+
+    assert [entry["date"] for entry in repayments] == [date(2026, 12, 15)]
+    assert [entry["amount_pence"] for entry in repayments] == [-5000]
+
+
+def test_previous_month_debt_payment_does_not_suppress_current_month(
+    cashflow_database,
+):
+    set_settings(cashflow_database)
+
+    add_debt(
+        "Credit card",
+        "500.00",
+        "1000.00",
+        "50.00",
+        15,
+        last_payment_date="2026-10-15",
+    )
+
+    projection = cashflow_service.generate_cashflow_projection(date(2026, 11, 1))
+
+    repayments = [
+        entry for entry in projection["entries"] if entry["type"] == "debt_repayment"
+    ]
+
+    assert [entry["date"] for entry in repayments] == [date(2026, 11, 15)]
+
+
+def test_recorded_debt_payment_does_not_suppress_following_months(
+    cashflow_database,
+):
+    set_settings(cashflow_database, months=3)
+
+    add_debt(
+        "Credit card",
+        "500.00",
+        "1000.00",
+        "50.00",
+        15,
+        last_payment_date="2026-11-03",
+    )
+
+    projection = cashflow_service.generate_cashflow_projection(date(2026, 11, 1))
+
+    repayments = [
+        entry for entry in projection["entries"] if entry["type"] == "debt_repayment"
+    ]
+
+    assert [entry["date"] for entry in repayments] == [
+        date(2026, 12, 15),
+        date(2027, 1, 15),
+    ]
