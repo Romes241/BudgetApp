@@ -24,6 +24,7 @@ from budget_app.pages.debt_page import DebtPage
 from budget_app.pages.fixed_expenses_page import FixedExpensesPage
 from budget_app.pages.income_page import IncomePage
 from budget_app.pages.payslip_import_page import PayslipImportPage
+from budget_app.pages.savings_goals_page import SavingsGoalsPage
 from budget_app.pages.settings_page import SettingsPage
 from budget_app.pages.variable_expenses_page import VariableExpensesPage
 
@@ -86,6 +87,8 @@ class MainWindow(QMainWindow):
         cashflow_page = CashflowPage()
         debt_page = DebtPage()
         debt_page.debts_changed.connect(cashflow_page.refresh_projection)
+        savings_goals_page = SavingsGoalsPage()
+        savings_goals_page.goals_changed.connect(cashflow_page.refresh_projection)
 
         fixed_expenses_page = FixedExpensesPage()
         variable_expenses_page = VariableExpensesPage()
@@ -96,6 +99,7 @@ class MainWindow(QMainWindow):
         self.page_stack.addWidget(dashboard_page)
         self.page_stack.addWidget(cashflow_page)
         self.page_stack.addWidget(debt_page)
+        self.page_stack.addWidget(savings_goals_page)
         self.page_stack.addWidget(fixed_expenses_page)
         self.page_stack.addWidget(variable_expenses_page)
         self.page_stack.addWidget(income_page)
@@ -116,6 +120,11 @@ class MainWindow(QMainWindow):
             sidebar_layout,
             "Debt Management",
             debt_page,
+        )
+        self._add_navigation_button(
+            sidebar_layout,
+            "Savings Goals",
+            savings_goals_page,
         )
         self._add_navigation_button(
             sidebar_layout,

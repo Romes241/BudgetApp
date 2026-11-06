@@ -1,6 +1,7 @@
 """Generate a chronological cashflow projection from existing financial data."""
 
 import calendar
+import sqlite3
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -138,6 +139,20 @@ def generate_cashflow_projection(
 
     end_date = _add_months(start_date, projection_months) - timedelta(days=1)
 
+    with database_connection() as connection:
+        savings_goals = connection.execute(
+            """SELECT id, name, target_amount_pence, current_amount_pence,
+                monthly_contribution_pence FROM savings_goals
+                WHERE active = 1"""
+        ).fetchall()
+        savings_transactions = connection.execute(
+            """SELECT t.goal_id, g.name, t.transaction_type, t.amount_pence,
+                t.transaction_date FROM savings_goal_transactions AS t
+                JOIN savings_goals AS g ON g.id = t.goal_id
+                WHERE transaction_date BETWEEN ? AND ?""",
+            (start_date.isoformat(), end_date.isoformat()),
+        ).fetchall()
+
     income_forecast = forecast_income_from_settings(
         start_date=start_date,
         end_date=end_date,
@@ -225,6 +240,62 @@ def generate_cashflow_projection(
     for expense in get_variable_expenses():
         entries.extend(_variable_weekly_entries(expense, start_date, end_date))
 
+    # Recorded future transactions enter cashflow directly. Monthly plans are
+    # reduced by deposits already recorded in that month, so the same saving
+    # is never counted twice. Opening balances remain user-maintained.
+    transactions_by_goal_month: dict[tuple[int, str], list[sqlite3.Row]] = {}
+    for transaction in savings_transactions:
+        key = (int(transaction["goal_id"]), transaction["transaction_date"][:7])
+        transactions_by_goal_month.setdefault(key, []).append(transaction)
+        is_deposit = transaction["transaction_type"] == "deposit"
+        entries.append(
+            {
+                "date": date.fromisoformat(transaction["transaction_date"]),
+                "type": "savings_deposit" if is_deposit else "savings_withdrawal",
+                "description": (
+                    f"{transaction['name']} deposit"
+                    if is_deposit
+                    else f"{transaction['name']} withdrawal"
+                ),
+                "amount_pence": -int(transaction["amount_pence"])
+                if is_deposit
+                else int(transaction["amount_pence"]),
+                "source_id": int(transaction["goal_id"]),
+            }
+        )
+
+    for goal in savings_goals:
+        monthly = int(goal["monthly_contribution_pence"])
+        remaining = max(
+            0,
+            int(goal["target_amount_pence"]) - int(goal["current_amount_pence"]),
+        )
+        if monthly <= 0 or remaining <= 0:
+            continue
+        for month in _month_dates(start_date, end_date):
+            due_date = _due_date(month.year, month.month, 1)
+            if due_date < start_date or due_date > end_date or remaining <= 0:
+                continue
+            deposits_recorded = sum(
+                int(transaction["amount_pence"])
+                for transaction in transactions_by_goal_month.get(
+                    (int(goal["id"]), month.strftime("%Y-%m")), []
+                )
+                if transaction["transaction_type"] == "deposit"
+            )
+            planned = min(max(0, monthly - deposits_recorded), remaining)
+            if planned:
+                entries.append(
+                    {
+                        "date": due_date,
+                        "type": "savings_contribution",
+                        "description": f"{goal['name']} contribution",
+                        "amount_pence": -planned,
+                        "source_id": int(goal["id"]),
+                    }
+                )
+                remaining -= planned
+
     # Ensure predictable ordering when multiple transactions share a date.
     type_order = {
         "regular_income": 0,
@@ -232,6 +303,9 @@ def generate_cashflow_projection(
         "fixed_expense": 2,
         "debt_repayment": 3,
         "variable_expense": 4,
+        "savings_deposit": 5,
+        "savings_contribution": 5,
+        "savings_withdrawal": 0,
     }
 
     entries.sort(
