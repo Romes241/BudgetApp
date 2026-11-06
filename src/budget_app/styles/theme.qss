@@ -275,3 +275,17 @@ QProgressBar#debtProgress::chunk {
     background-color: #8b5cf6;
     border-radius: 4px;
 }
+
+QProgressBar#savingsProgress {
+    background-color: #292333;
+    color: #f1f5f9;
+    border: 1px solid #3b3448;
+    border-radius: 5px;
+    text-align: center;
+    min-height: 18px;
+}
+
+QProgressBar#savingsProgress::chunk {
+    background-color: #8b5cf6;
+    border-radius: 4px;
+}

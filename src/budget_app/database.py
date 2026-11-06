@@ -6,7 +6,7 @@ from pathlib import Path
 
 from budget_app.paths import get_database_path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 SCHEMA_SQL = """
@@ -178,6 +178,9 @@ CREATE TABLE IF NOT EXISTS savings_goals (
         CHECK (target_amount_pence > 0),
     current_amount_pence INTEGER NOT NULL DEFAULT 0
         CHECK (current_amount_pence >= 0),
+    monthly_contribution_pence INTEGER NOT NULL DEFAULT 0
+        CHECK (monthly_contribution_pence >= 0),
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT (
         strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
     )
@@ -203,6 +206,7 @@ CREATE INDEX IF NOT EXISTS idx_variable_expenses_active
 
 CREATE INDEX IF NOT EXISTS idx_debts_active
     ON debts(active);
+
 """
 
 
@@ -387,6 +391,59 @@ def _migrate_to_v5(connection: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_to_v6(connection: sqlite3.Connection) -> None:
+    """Add savings goal contributions and an auditable transaction ledger."""
+
+    columns = _table_columns(connection, "savings_goals")
+    if "monthly_contribution_pence" not in columns:
+        connection.execute(
+            """
+            ALTER TABLE savings_goals
+            ADD COLUMN monthly_contribution_pence INTEGER NOT NULL DEFAULT 0
+                CHECK (monthly_contribution_pence >= 0)
+            """
+        )
+    if "active" not in columns:
+        connection.execute(
+            """
+            ALTER TABLE savings_goals
+            ADD COLUMN active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+            """
+        )
+
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_savings_goals_active ON savings_goals(active)"
+    )
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS savings_goal_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            goal_id INTEGER NOT NULL,
+            transaction_type TEXT NOT NULL
+                CHECK (transaction_type IN ('deposit', 'withdrawal')),
+            amount_pence INTEGER NOT NULL CHECK (amount_pence > 0),
+            transaction_date TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            ),
+            CHECK (
+                length(transaction_date) = 10
+                AND date(transaction_date) IS NOT NULL
+                AND date(transaction_date) = transaction_date
+            ),
+            FOREIGN KEY (goal_id) REFERENCES savings_goals(id) ON DELETE CASCADE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_savings_goal_transactions_goal_date
+        ON savings_goal_transactions(goal_id, transaction_date)
+        """
+    )
+
+
 def initialise_database(
     connection: sqlite3.Connection,
 ) -> None:
@@ -420,6 +477,9 @@ def initialise_database(
 
         if current_version < 5:
             _migrate_to_v5(connection)
+
+        if current_version < 6:
+            _migrate_to_v6(connection)
 
         connection.execute("INSERT OR IGNORE INTO settings (id) VALUES (1)")
         connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

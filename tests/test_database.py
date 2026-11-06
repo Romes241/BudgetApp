@@ -15,6 +15,7 @@ EXPECTED_TABLES = {
     "variable_expenses",
     "debts",
     "savings_goals",
+    "savings_goal_transactions",
 }
 
 
@@ -275,7 +276,49 @@ def test_migration_updates_schema_version(tmp_path):
 
         version = connection.execute("PRAGMA user_version").fetchone()[0]
 
-        assert version == SCHEMA_VERSION == 5
+        assert version == SCHEMA_VERSION == 6
+
+
+def test_version_five_migration_preserves_savings_and_adds_ledger(tmp_path):
+    database_path = tmp_path / "legacy_v5.db"
+
+    with connect_database(database_path) as connection:
+        connection.execute(
+            """CREATE TABLE savings_goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                target_amount_pence INTEGER NOT NULL CHECK (target_amount_pence > 0),
+                current_amount_pence INTEGER NOT NULL DEFAULT 0
+                    CHECK (current_amount_pence >= 0),
+                created_at TEXT NOT NULL DEFAULT (
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                )
+            )"""
+        )
+        connection.execute(
+            """INSERT INTO savings_goals
+                (name, target_amount_pence, current_amount_pence)
+                VALUES ('Emergency fund', 100000, 25000)"""
+        )
+        connection.execute("PRAGMA user_version = 5")
+        connection.commit()
+        initialise_database(connection)
+
+        goal = connection.execute(
+            "SELECT * FROM savings_goals WHERE name = 'Emergency fund'"
+        ).fetchone()
+        tables = {
+            row["name"]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+
+        assert goal["current_amount_pence"] == 25000
+        assert goal["monthly_contribution_pence"] == 0
+        assert goal["active"] == 1
+        assert "savings_goal_transactions" in tables
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
 
 
 def test_migration_is_safe_to_repeat(tmp_path):
@@ -348,7 +391,7 @@ def test_version_four_migration_adds_early_payment_offset(tmp_path):
         assert settings["early_payment_offset_days"] == 1
 
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        assert version == SCHEMA_VERSION == 5
+        assert version == SCHEMA_VERSION == 6
 
 
 def test_early_payment_offset_rejects_values_outside_supported_range(tmp_path):

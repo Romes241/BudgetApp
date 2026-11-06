@@ -6,6 +6,10 @@ from budget_app.database import connect_database, initialise_database
 from budget_app.services import cashflow_service
 from budget_app.services.debt_service import add_debt, record_debt_payment
 from budget_app.services.fixed_expense_service import add_fixed_expense
+from budget_app.services.savings_goal_service import (
+    add_savings_goal,
+    record_savings_transaction,
+)
 from budget_app.services.variable_expense_service import (
     add_variable_expense,
     deactivate_variable_expense,
@@ -27,6 +31,7 @@ def cashflow_database(tmp_path, monkeypatch):
         "budget_app.services.cashflow_service",
         "budget_app.services.debt_service",
         "budget_app.services.fixed_expense_service",
+        "budget_app.services.savings_goal_service",
         "budget_app.services.variable_expense_service",
     ):
         monkeypatch.setattr(
@@ -411,3 +416,65 @@ def test_recorded_debt_payment_does_not_suppress_following_months(
         date(2026, 12, 15),
         date(2027, 1, 15),
     ]
+
+
+def test_savings_contributions_are_projected_and_capped_at_goal_target(
+    cashflow_database,
+):
+    set_settings(cashflow_database, months=3)
+    add_savings_goal("Emergency fund", "250", "100", "50")
+
+    projection = cashflow_service.generate_cashflow_projection(date(2026, 11, 1))
+    contributions = [
+        entry
+        for entry in projection["entries"]
+        if entry["type"] == "savings_contribution"
+    ]
+
+    assert [entry["amount_pence"] for entry in contributions] == [-10000, -10000]
+    assert [entry["date"] for entry in contributions] == [
+        date(2026, 11, 1),
+        date(2026, 12, 1),
+    ]
+
+
+def test_recorded_savings_deposit_reduces_same_month_planned_contribution(
+    cashflow_database,
+):
+    set_settings(cashflow_database, months=1)
+    goal_id = add_savings_goal("Car", "1000", "100", "0")
+    record_savings_transaction(goal_id, "deposit", "60", date.today())
+
+    projection = cashflow_service.generate_cashflow_projection(date(2026, 11, 1))
+    savings_entries = [
+        entry for entry in projection["entries"] if entry["type"].startswith("savings_")
+    ]
+
+    assert sum(entry["amount_pence"] for entry in savings_entries) == -10000
+    assert (
+        sum(
+            entry["amount_pence"]
+            for entry in savings_entries
+            if entry["type"] == "savings_contribution"
+        )
+        == -4000
+    )
+
+
+def test_savings_transaction_on_projection_start_is_in_opening_balance(
+    cashflow_database,
+):
+    today = date.today()
+    month_start = today.replace(day=1)
+    set_settings(cashflow_database, balance=100000, months=1)
+    goal_id = add_savings_goal("Car", "1000", "100", "0")
+    record_savings_transaction(goal_id, "deposit", "60", month_start)
+
+    projection = cashflow_service.generate_cashflow_projection(month_start)
+    savings_entries = [
+        entry for entry in projection["entries"] if entry["type"].startswith("savings_")
+    ]
+
+    assert [entry["type"] for entry in savings_entries] == ["savings_contribution"]
+    assert savings_entries[0]["amount_pence"] == -4000
+    assert projection["opening_balance_pence"] == 100000
