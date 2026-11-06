@@ -459,3 +459,22 @@ def test_recorded_savings_deposit_reduces_same_month_planned_contribution(
         )
         == -4000
     )
+
+
+def test_savings_transaction_on_projection_start_is_in_opening_balance(
+    cashflow_database,
+):
+    today = date.today()
+    month_start = today.replace(day=1)
+    set_settings(cashflow_database, balance=100000, months=1)
+    goal_id = add_savings_goal("Car", "1000", "100", "0")
+    record_savings_transaction(goal_id, "deposit", "60", month_start)
+
+    projection = cashflow_service.generate_cashflow_projection(month_start)
+    savings_entries = [
+        entry for entry in projection["entries"] if entry["type"].startswith("savings_")
+    ]
+
+    assert [entry["type"] for entry in savings_entries] == ["savings_contribution"]
+    assert savings_entries[0]["amount_pence"] == -4000
+    assert projection["opening_balance_pence"] == 100000

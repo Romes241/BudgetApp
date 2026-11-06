@@ -195,7 +195,11 @@ def get_savings_goal_summary() -> dict[str, int]:
         row = connection.execute(
             """SELECT COALESCE(SUM(current_amount_pence), 0) AS saved,
                 COALESCE(SUM(target_amount_pence), 0) AS targets,
-                COUNT(*) AS count
+                COUNT(
+                    CASE
+                        WHEN current_amount_pence < target_amount_pence THEN 1
+                    END
+                ) AS count
                 FROM savings_goals WHERE active = 1"""
         ).fetchone()
     return {

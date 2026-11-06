@@ -240,29 +240,31 @@ def generate_cashflow_projection(
     for expense in get_variable_expenses():
         entries.extend(_variable_weekly_entries(expense, start_date, end_date))
 
-    # Recorded future transactions enter cashflow directly. Monthly plans are
-    # reduced by deposits already recorded in that month, so the same saving
-    # is never counted twice. Opening balances remain user-maintained.
+    # Transactions dated on the projection start date are already reflected
+    # in the opening balance. Later transactions enter cashflow directly.
+    # Recorded deposits also reduce that month's planned contribution.
     transactions_by_goal_month: dict[tuple[int, str], list[sqlite3.Row]] = {}
     for transaction in savings_transactions:
         key = (int(transaction["goal_id"]), transaction["transaction_date"][:7])
         transactions_by_goal_month.setdefault(key, []).append(transaction)
         is_deposit = transaction["transaction_type"] == "deposit"
-        entries.append(
-            {
-                "date": date.fromisoformat(transaction["transaction_date"]),
-                "type": "savings_deposit" if is_deposit else "savings_withdrawal",
-                "description": (
-                    f"{transaction['name']} deposit"
+        transaction_date = date.fromisoformat(transaction["transaction_date"])
+        if transaction_date > start_date:
+            entries.append(
+                {
+                    "date": transaction_date,
+                    "type": "savings_deposit" if is_deposit else "savings_withdrawal",
+                    "description": (
+                        f"{transaction['name']} deposit"
+                        if is_deposit
+                        else f"{transaction['name']} withdrawal"
+                    ),
+                    "amount_pence": -int(transaction["amount_pence"])
                     if is_deposit
-                    else f"{transaction['name']} withdrawal"
-                ),
-                "amount_pence": -int(transaction["amount_pence"])
-                if is_deposit
-                else int(transaction["amount_pence"]),
-                "source_id": int(transaction["goal_id"]),
-            }
-        )
+                    else int(transaction["amount_pence"]),
+                    "source_id": int(transaction["goal_id"]),
+                }
+            )
 
     for goal in savings_goals:
         monthly = int(goal["monthly_contribution_pence"])

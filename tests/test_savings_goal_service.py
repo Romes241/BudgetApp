@@ -103,11 +103,12 @@ def test_invalid_transactions_are_rejected(
 def test_summary_counts_active_goals_only(savings_database):
     first_id = savings_goal_service.add_savings_goal("A", "100", current_amount="20")
     savings_goal_service.add_savings_goal("B", "200", current_amount="50")
+    savings_goal_service.add_savings_goal("C", "100", current_amount="100")
     savings_goal_service.set_savings_goal_active(first_id, False)
 
     assert savings_goal_service.get_savings_goal_summary() == {
-        "total_saved_pence": 5000,
-        "total_targets_pence": 20000,
+        "total_saved_pence": 15000,
+        "total_targets_pence": 30000,
         "active_goals": 1,
     }
 
