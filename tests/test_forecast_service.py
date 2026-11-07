@@ -340,9 +340,10 @@ def test_settings_forecast_uses_all_payslips_within_eight_week_window(
 
     # All seven payslips fall within the eight-week window.
     assert result["historical_payslips_used"] == 7
-    assert result["estimation_method"] == "historical_average"
-    assert result["regular_pay_estimate_pence"] == 42857
-    assert result["regular_income_pence"] == 171428
+    assert result["estimation_method"] == "settings_based_payroll_estimate"
+    assert result["historical_regular_pay_average_pence"] == 42857
+    assert result["regular_pay_estimate_pence"] == 28429
+    assert result["regular_income_pence"] == 113716
     assert (
         len([entry for entry in result["entries"] if entry["type"] == "regular_income"])
         == 4
@@ -374,8 +375,9 @@ def test_settings_forecast_removes_identifiable_one_off_earnings(
         end_date=date(2026, 11, 6),
     )
 
-    # The estimated net contribution of the £100 bonus is £80.
-    assert result["regular_pay_estimate_pence"] == 24000
+    # History is compared, but settings drive the forecast estimate.
+    assert result["historical_regular_pay_average_pence"] == 24000
+    assert result["regular_pay_estimate_pence"] == 28429
     assert result["historical_payslips_used"] == 1
 
 
@@ -394,10 +396,10 @@ def test_settings_forecast_falls_back_to_gross_wage_estimate(
         end_date=date(2026, 11, 8),
     )
 
-    assert result["estimation_method"] == "gross_less_provisional_25_percent"
-    assert result["fallback_gross_estimate_pence"] == 30000
-    assert result["regular_pay_estimate_pence"] == 22500
-    assert "25%" in result["estimation_note"]
+    assert result["estimation_method"] == "settings_based_payroll_estimate"
+    assert result["gross_pay_estimate_pence"] == 30000
+    assert result["regular_pay_estimate_pence"] == 28429
+    assert "2026-27" in result["estimation_note"]
 
 
 @pytest.mark.parametrize(
@@ -574,7 +576,7 @@ def test_settings_forecast_reports_unknown_payment_lines(
         end_date=date(2026, 11, 6),
     )
 
-    assert result["regular_pay_estimate_pence"] == 24000
+    assert result["regular_pay_estimate_pence"] == 28429
     assert result["forecast_diagnostics"]["payslips_with_unclassified_earnings"] == 1
     assert result["forecast_diagnostics"]["unclassified_payment_lines"] == 1
 
@@ -603,7 +605,7 @@ def test_settings_forecast_reports_holiday_pay_without_subtracting_it(
         end_date=date(2026, 11, 6),
     )
 
-    assert result["regular_pay_estimate_pence"] == 24000
+    assert result["regular_pay_estimate_pence"] == 28429
     assert result["forecast_diagnostics"]["payslips_with_holiday_pay"] == 1
     assert result["forecast_diagnostics"]["holiday_payment_lines"] == 1
 
@@ -633,7 +635,7 @@ def test_settings_forecast_does_not_subtract_same_bonus_twice(
         end_date=date(2026, 11, 6),
     )
 
-    assert result["regular_pay_estimate_pence"] == 24000
+    assert result["regular_pay_estimate_pence"] == 28429
 
 
 def test_settings_forecast_excludes_future_dated_payslips(
@@ -661,7 +663,8 @@ def test_settings_forecast_excludes_future_dated_payslips(
     )
 
     assert result["historical_payslips_used"] == 1
-    assert result["regular_pay_estimate_pence"] == 24000
+    assert result["historical_regular_pay_average_pence"] == 24000
+    assert result["regular_pay_estimate_pence"] == 28429
 
 
 def test_settings_forecast_uses_only_payslips_on_or_before_as_of_date(
@@ -691,7 +694,8 @@ def test_settings_forecast_uses_only_payslips_on_or_before_as_of_date(
     )
 
     assert result["historical_payslips_used"] == 2
-    assert result["regular_pay_estimate_pence"] == 25000
+    assert result["historical_regular_pay_average_pence"] == 25000
+    assert result["regular_pay_estimate_pence"] == 28429
 
 
 def test_settings_forecast_excludes_dates_with_actual_income(
@@ -722,7 +726,7 @@ def test_settings_forecast_excludes_dates_with_actual_income(
         date(2026, 11, 19),
         date(2026, 11, 26),
     ]
-    assert result["regular_income_pence"] == 67500
+    assert result["regular_income_pence"] == 85287
     assert result["forecast_diagnostics"]["recorded_pay_dates_excluded"] == 1
 
 
@@ -774,7 +778,8 @@ def test_settings_forecast_excludes_payslips_older_than_eight_weeks(
 
     # 5 September is outside the window; 6 September is included.
     assert result["historical_payslips_used"] == 2
-    assert result["regular_pay_estimate_pence"] == 30000
+    assert result["historical_regular_pay_average_pence"] == 30000
+    assert result["regular_pay_estimate_pence"] == 28429
 
 
 def test_settings_forecast_uses_fallback_without_payslips_in_window(
@@ -790,6 +795,6 @@ def test_settings_forecast_uses_fallback_without_payslips_in_window(
     )
 
     assert result["historical_payslips_used"] == 0
-    assert result["estimation_method"] == "gross_less_provisional_25_percent"
-    assert result["fallback_gross_estimate_pence"] == 30000
-    assert result["regular_pay_estimate_pence"] == 22500
+    assert result["estimation_method"] == "settings_based_payroll_estimate"
+    assert result["gross_pay_estimate_pence"] == 30000
+    assert result["regular_pay_estimate_pence"] == 28429
