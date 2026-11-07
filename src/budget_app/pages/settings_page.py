@@ -253,9 +253,8 @@ class SettingsPage(QWidget):
     def _build_tax_card(self, grid: QGridLayout) -> None:
         card, layout = self._create_card(
             "Tax & deductions",
-            "These details are stored for more detailed payroll forecasting. "
-            "The current fallback estimate still uses a provisional 25% "
-            "deduction when there are no recent payslips.",
+            "These settings drive the projected take-home pay calculation. "
+            "Tax rates are selected automatically from the forecast date.",
         )
         form = self._create_form()
 
@@ -315,7 +314,17 @@ class SettingsPage(QWidget):
         form.addRow("NI category", self.ni_category_input)
         form.addRow("Scottish taxpayer", self.scottish_taxpayer_input)
 
+        assumptions = QLabel(
+            "Pension is estimated as a PAYE/net-pay contribution based on all "
+            "gross earnings. Payroll rounding, tax-code adjustments, other "
+            "deductions and scheme-specific pensionable pay can change the "
+            "actual payslip. Recent payslips are shown as a comparison."
+        )
+        assumptions.setObjectName("secondaryText")
+        assumptions.setWordWrap(True)
+
         layout.addLayout(form)
+        layout.addWidget(assumptions)
         grid.addWidget(card, 1, 0, 1, 2)
 
     def refresh_settings(self) -> bool:
