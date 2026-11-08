@@ -148,6 +148,11 @@ class CashflowPage(QWidget):
 
         main_layout.addLayout(summary_layout)
 
+        self.payroll_summary_label = QLabel("")
+        self.payroll_summary_label.setObjectName("secondaryText")
+        self.payroll_summary_label.setWordWrap(True)
+        main_layout.addWidget(self.payroll_summary_label)
+
         # Ledger heading.
         ledger_heading = QLabel("Projected transactions")
         ledger_heading.setObjectName("sectionHeading")
@@ -210,6 +215,7 @@ class CashflowPage(QWidget):
         try:
             self.projection = generate_cashflow_projection()
             self._update_summary()
+            self._update_payroll_summary()
             self._populate_table()
 
             self.status_label.setText(
@@ -226,6 +232,7 @@ class CashflowPage(QWidget):
             self.projected_balance_card.set_value("£0.00")
             self.income_card.set_value("£0.00")
             self.outgoings_card.set_value("£0.00")
+            self.payroll_summary_label.clear()
 
             self.date_range_label.setText("Projection unavailable")
             self.status_label.setText("Unable to generate cashflow projection.")
@@ -274,6 +281,42 @@ class CashflowPage(QWidget):
 
         self.income_card.set_value(format_money(total_income))
         self.outgoings_card.set_value(format_money(total_outgoings))
+
+    def _update_payroll_summary(self) -> None:
+        """Explain the projected-pay calculation and show its deductions."""
+
+        if self.projection is None:
+            return
+
+        forecast = self.projection.get("income_forecast", {})
+        breakdown = forecast.get("payroll_breakdown")
+        if not breakdown:
+            self.payroll_summary_label.setText(
+                "Regular take-home pay uses saved payroll settings."
+            )
+            return
+
+        details = [
+            (
+                f"{breakdown['tax_year']} settings-based estimate per pay period: "
+                f"gross {format_money(breakdown['gross_pay_pence'])}, "
+                f"PAYE {format_money(breakdown['tax_pence'])}, "
+                f"NI {format_money(breakdown['ni_pence'])}, "
+                f"pension {format_money(breakdown['pension_pence'])}, "
+                f"student loan {format_money(breakdown['student_loan_pence'])}, "
+                f"take-home {format_money(breakdown['net_pay_pence'])}."
+            ),
+        ]
+        history_average = forecast.get("historical_regular_pay_average_pence")
+        payslips_used = forecast.get("historical_payslips_used", 0)
+        if history_average is not None:
+            details.append(
+                f"Recent payslips ({payslips_used}) average "
+                f"{format_money(history_average)} and are shown for comparison; "
+                "the forecast uses the settings-based estimate."
+            )
+        details.append(breakdown["assumptions"])
+        self.payroll_summary_label.setText(" ".join(details))
 
     def _populate_table(self) -> None:
         """Populate the transaction ledger."""

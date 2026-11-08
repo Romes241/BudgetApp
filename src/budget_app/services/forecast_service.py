@@ -1,17 +1,15 @@
-"""Income forecasting with historical pay estimates and expected bonuses.
-
-The fallback net-pay estimate uses a provisional 25% deduction from
-estimated gross pay. It is not a tax calculator and should not be
-treated as a guaranteed take-home amount.
-"""
+"""Income forecasting with settings-based payroll estimates and bonuses."""
 
 import calendar
 from datetime import date, datetime, timedelta
 from typing import Any
 
 from budget_app.database import database_connection
+from budget_app.services.payroll_service import (
+    calculate_take_home_pay,
+    tax_year_for_date,
+)
 
-FALLBACK_DEDUCTION_RATE = 0.25
 HISTORICAL_LOOKBACK_DAYS = 56
 VALID_PAY_FREQUENCIES = {"weekly", "fortnightly", "monthly"}
 
@@ -214,38 +212,6 @@ def _estimate_historical_regular_net_pence(
     return average, len(regular_net_amounts), diagnostics
 
 
-def _estimate_fallback_net_pence(
-    hourly_wage_pence: int,
-    average_hours: float,
-    frequency: str,
-) -> tuple[int, int]:
-    """Estimate gross and net pay using wage, hours and a 25% deduction."""
-
-    if hourly_wage_pence < 0:
-        raise ValueError("Hourly wage cannot be negative.")
-
-    if average_hours < 0:
-        raise ValueError("Average hours cannot be negative.")
-
-    weekly_gross = round(hourly_wage_pence * average_hours)
-
-    if frequency == "weekly":
-        gross = weekly_gross
-
-    elif frequency == "fortnightly":
-        gross = weekly_gross * 2
-
-    elif frequency == "monthly":
-        gross = round(weekly_gross * 52 / 12)
-
-    else:
-        raise ValueError("Pay frequency must be weekly, fortnightly or monthly.")
-
-    estimated_net = round(gross * (1 - FALLBACK_DEDUCTION_RATE))
-
-    return gross, estimated_net
-
-
 def _get_expected_bonuses(
     connection: Any,
     start_date: date,
@@ -314,18 +280,14 @@ def forecast_income_from_settings(
 ) -> dict[str, Any]:
     """Forecast dated income using settings, recent payslips and bonuses.
 
-    Historical mode averages eligible payslips dated from 56 days before the
-    forecast start date up to and including it, adjusting for identifiable
-    bonus and additional earnings. Holiday and unknown payment lines are
-    reported as uncertainty rather than automatically subtracted.
+    Regular forecast pay is calculated from saved payroll settings. Recent
+    payslips are retained as a comparison so users can see the difference
+    between the settings-based estimate and observed pay.
 
     Actual income records on contractual pay dates replace the corresponding
     projected regular-income entries. Projected entries are shifted by the
     configured early-payment offset, but historical payslip dates are never
     changed.
-
-    Without eligible historical payslips, income is estimated from wage and
-    hours using a provisional 25% deduction.
 
     If next_pay_date is not configured, regular pay dates cannot be generated.
     Confirmed expected bonuses are still returned independently.
@@ -357,33 +319,31 @@ def forecast_income_from_settings(
             _estimate_historical_regular_net_pence(connection, start_date)
         )
 
-        if historical_average is not None:
-            regular_net_pence = historical_average
-            gross_estimate_pence = None
-            estimation_method = "historical_average"
-            estimation_note = (
-                f"Average of payslips dated from {HISTORICAL_LOOKBACK_DAYS} days "
-                "before the forecast start date up to and including that date, "
-                "with estimated net contributions "
-                "from identifiable bonus and additional earnings removed. "
-                "Holiday and unclassified payment lines are not automatically "
-                "removed because their recurrence and relationship to normal "
-                "earnings are uncertain."
+        tax_year = tax_year_for_date(start_date)
+        payroll_estimate = calculate_take_home_pay(
+            hourly_wage_pence=int(settings["hourly_wage_pence"]),
+            average_hours=float(settings["average_hours"]),
+            frequency=frequency,
+            tax_code=settings["tax_code"],
+            ni_category=settings["ni_category"],
+            scottish_taxpayer=bool(settings["scottish_taxpayer"]),
+            pension_percent=float(settings["pension_percent"]),
+            student_loan_plan=settings["student_loan_plan"],
+            tax_year=tax_year,
+        )
+        gross_estimate_pence = payroll_estimate["gross_pay_pence"]
+        regular_net_pence = payroll_estimate["net_pay_pence"]
+        estimation_method = "settings_based_payroll_estimate"
+        estimation_note = (
+            f"Settings-based estimate for UK tax year {tax_year}. "
+            + payroll_estimate["assumptions"]
+            + (
+                f" Recent payslips average {historical_average} pence after identified one-off earnings; "
+                "that history is shown for comparison and does not override the settings estimate."
+                if historical_average is not None
+                else " No recent payslips were available for comparison."
             )
-
-        else:
-            gross_estimate_pence, regular_net_pence = _estimate_fallback_net_pence(
-                int(settings["hourly_wage_pence"]),
-                float(settings["average_hours"]),
-                frequency,
-            )
-            estimation_method = "gross_less_provisional_25_percent"
-            estimation_note = (
-                "Estimated gross pay from hourly wage and average weekly hours. "
-                "Net pay assumes 25% total deductions; this is a rough estimate, "
-                "not a calculation of tax, National Insurance, pension or "
-                "student-loan deductions."
-            )
+        )
 
         next_pay_date_value = settings["next_pay_date"]
 
@@ -485,7 +445,9 @@ def forecast_income_from_settings(
         "estimation_note": estimation_note,
         "historical_payslips_used": payslips_used,
         "regular_pay_estimate_pence": regular_net_pence,
-        "fallback_gross_estimate_pence": gross_estimate_pence,
+        "gross_pay_estimate_pence": gross_estimate_pence,
+        "payroll_breakdown": payroll_estimate,
+        "historical_regular_pay_average_pence": historical_average,
         "regular_income_pence": regular_total,
         "expected_bonus_pence": bonus_total,
         "total_income_pence": regular_total + bonus_total,
