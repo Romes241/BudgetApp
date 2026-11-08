@@ -171,6 +171,21 @@ QTableWidget#cashflowTable::item {
     padding: 7px;
 }
 
+QTableWidget#analyticsIncomeTable {
+    background-color: #111318;
+    alternate-background-color: #191c23;
+    color: #f1f5f9;
+    border: 1px solid #30343d;
+    border-radius: 7px;
+    gridline-color: #30343d;
+    selection-background-color: #352747;
+    selection-color: #ffffff;
+}
+
+QTableWidget#analyticsIncomeTable::item {
+    padding: 7px;
+}
+
 /* Table headers */
 QHeaderView::section {
     background-color: #20232b;
@@ -259,6 +274,53 @@ QCheckBox::indicator:disabled {
 QScrollArea {
     background-color: transparent;
     border: none;
+}
+
+/* Compact scrollbars to match the dark surfaces and purple accents. */
+QScrollBar:vertical {
+    background-color: #191c23;
+    width: 10px;
+    margin: 2px;
+    border: none;
+    border-radius: 5px;
+}
+
+QScrollBar:horizontal {
+    background-color: #191c23;
+    height: 10px;
+    margin: 2px;
+    border: none;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical,
+QScrollBar::handle:horizontal {
+    background-color: #514366;
+    min-width: 24px;
+    min-height: 24px;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:vertical:hover,
+QScrollBar::handle:horizontal:hover {
+    background-color: #8b5cf6;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+    height: 0;
+    border: none;
+    background: none;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: transparent;
 }
 
 QProgressBar#debtProgress {

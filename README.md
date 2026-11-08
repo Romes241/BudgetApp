@@ -3,15 +3,18 @@
 
 A personal finance desktop application built with Python, PySide6 and SQLite.
 
-## Planned Features
+## Features
 
-- Income tracking and payslip analysis
-- Salary and take-home pay estimation
-- Fixed and variable expense management
+- Income tracking, payslip import and analysis
+- UK take-home pay estimates based on saved payroll settings
+- Fixed and variable expense budgets
 - Debt tracking and repayment projections
 - Cashflow forecasting
-- Savings goals
-- Financial analytics
+- Savings goals and contribution tracking
+- Financial analytics for recorded income, deductions, planned commitments and savings progress
+
+## Planned
+
 - What-if financial simulator
 
 ## Technology Stack
@@ -61,5 +64,5 @@ python -m pytest
 
 ## Project Status
 
-Early development. Features will be implemented incrementally with
-automated tests.
+BudgetApp is under active development. Work in progress is tracked in GitHub
+issues, and the current automated test suite can be run with `python -m pytest`.
