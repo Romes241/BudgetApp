@@ -43,6 +43,34 @@ def test_tax_code_and_scottish_status_change_income_tax():
     assert standard["tax_pence"] != scottish["tax_pence"]
 
 
+@pytest.mark.parametrize(
+    ("tax_code", "expected_weekly_tax"),
+    [
+        ("BR W1", 20000),
+        ("BR M1", 20000),
+        ("D0 X", 40000),
+        ("D1 W1", 45000),
+        ("NT X", 0),
+        ("SD0", 21000),
+        ("SD1", 42000),
+        ("SD2", 45000),
+        ("SD3", 48000),
+    ],
+)
+def test_special_and_emergency_tax_codes_use_their_fixed_rates(
+    tax_code, expected_weekly_tax
+):
+    result = calculate(tax_code=tax_code)
+    assert result["tax_pence"] == expected_weekly_tax
+
+
+def test_k_code_keeps_its_taxable_pay_addition_above_personal_allowance_taper():
+    result = calculate(hourly_wage_pence=5000, average_hours=40, tax_code="K500")
+
+    # £104,000 gross plus the £5,000 K-code addition is taxed progressively.
+    assert result["tax_pence"] == 69346
+
+
 def test_ni_category_changes_employee_ni():
     standard = calculate()
     reduced = calculate(ni_category="B")

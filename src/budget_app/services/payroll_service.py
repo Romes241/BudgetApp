@@ -70,13 +70,19 @@ def tax_year_for_date(value: date) -> str:
     )
 
 
+def _normalize_tax_code(code: str) -> str:
+    """Remove spaces and non-cumulative markers before interpreting a code."""
+    compact = re.sub(r"\s+", "", code.upper())
+    return re.sub(r"(W1|M1|X|NONCUM)$", "", compact)
+
+
 def _tax_allowance(code: str, annual_gross: int) -> tuple[int, bool]:
-    normalized = re.sub(r"(W1|M1|X)$", "", code.upper().replace(" ", ""))
+    normalized = _normalize_tax_code(code)
     if normalized in {"BR", "SBR"}:
         return 0, True
-    if normalized in {"D0", "SD0"}:
+    if normalized in {"D0", "SD0", "SD1", "SD2", "SD3"}:
         return 0, True
-    if normalized in {"D1", "SD1"}:
+    if normalized == "D1":
         return 0, True
     if normalized in {"NT", "SNT"}:
         return annual_gross, False
@@ -97,16 +103,22 @@ def _tax_allowance(code: str, annual_gross: int) -> tuple[int, bool]:
 def _income_tax(
     annual_gross: int, allowance: int, scottish: bool, tax_code: str, tax_year: str
 ) -> int:
-    normalized = tax_code.upper().replace(" ", "")
+    normalized = _normalize_tax_code(tax_code)
     if normalized in {"NT", "SNT"}:
         return 0
-    if normalized in {"D0", "SD0"}:
-        return round(annual_gross * 0.40)
-    if normalized in {"D1", "SD1"}:
-        return round(annual_gross * 0.45)
+    fixed_rates = {
+        "D0": 0.40,
+        "D1": 0.45,
+        "SD0": 0.21,
+        "SD1": 0.42,
+        "SD2": 0.45,
+        "SD3": 0.48,
+    }
+    if normalized in fixed_rates:
+        return round(annual_gross * fixed_rates[normalized])
     if normalized in {"BR", "SBR"}:
         return round(annual_gross * 0.20)
-    if annual_gross > 10_000_000:
+    if annual_gross > 10_000_000 and allowance >= 0:
         allowance = max(0, allowance - (annual_gross - 10_000_000) // 2)
     taxable = max(0, annual_gross - allowance)
     bands = TAX_BANDS[tax_year]["Scotland" if scottish else "rUK"]
