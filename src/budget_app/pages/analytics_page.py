@@ -393,6 +393,9 @@ class AnalyticsPage(QWidget):
 
         self.income_table = self._create_table(self.INCOME_HEADERS)
         self.income_table.setObjectName("analyticsIncomeTable")
+        self.income_table.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         layout.addWidget(self.income_table)
 
         self.planned_heading = QLabel("Current planned commitments")
@@ -597,7 +600,12 @@ class AnalyticsPage(QWidget):
                     )
                 self.income_table.setItem(row_index, column, item)
         self.income_table.resizeRowsToContents()
-        self.income_table.setMinimumHeight(42 + len(months) * 34)
+        header_height = self.income_table.horizontalHeader().sizeHint().height()
+        rows_height = sum(
+            self.income_table.rowHeight(row) for row in range(len(months))
+        )
+        frame_height = self.income_table.frameWidth() * 2
+        self.income_table.setFixedHeight(header_height + rows_height + frame_height)
 
     def _show_savings_goals(self, goals: list[dict[str, Any]]) -> None:
         while self.goals_container.count():
