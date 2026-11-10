@@ -12,10 +12,7 @@ A personal finance desktop application built with Python, PySide6 and SQLite.
 - Cashflow forecasting
 - Savings goals and contribution tracking
 - Financial analytics for recorded income, deductions, planned commitments and savings progress
-
-## Planned
-
-- What-if financial simulator
+- What-if payroll scenarios using temporary pay and spending assumptions
 
 ## Technology Stack
 

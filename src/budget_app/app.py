@@ -27,6 +27,7 @@ from budget_app.pages.income_page import IncomePage
 from budget_app.pages.payslip_import_page import PayslipImportPage
 from budget_app.pages.savings_goals_page import SavingsGoalsPage
 from budget_app.pages.settings_page import SettingsPage
+from budget_app.pages.simulator_page import SimulatorPage
 from budget_app.pages.variable_expenses_page import VariableExpensesPage
 
 
@@ -97,10 +98,12 @@ class MainWindow(QMainWindow):
         income_page = IncomePage()
         payslip_import_page = PayslipImportPage(income_page=income_page)
         settings_page = SettingsPage()
+        self.simulator_page = SimulatorPage()
 
         self.page_stack.addWidget(dashboard_page)
         self.page_stack.addWidget(self.analytics_page)
         self.page_stack.addWidget(cashflow_page)
+        self.page_stack.addWidget(self.simulator_page)
         self.page_stack.addWidget(debt_page)
         self.page_stack.addWidget(savings_goals_page)
         self.page_stack.addWidget(fixed_expenses_page)
@@ -123,6 +126,11 @@ class MainWindow(QMainWindow):
             sidebar_layout,
             "Cashflow",
             cashflow_page,
+        )
+        self._add_navigation_button(
+            sidebar_layout,
+            "What-if Simulator",
+            self.simulator_page,
         )
         self._add_navigation_button(
             sidebar_layout,
@@ -231,6 +239,8 @@ class MainWindow(QMainWindow):
         self.page_stack.setCurrentIndex(page_index)
         if name == "Analytics":
             self.analytics_page.refresh_analytics()
+        elif name == "What-if Simulator":
+            self.simulator_page.refresh_projection()
 
 
 def main() -> None:
