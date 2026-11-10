@@ -36,6 +36,7 @@ from budget_app.services.payslip_import_service import (
     preview_payslip_import,
     validate_payslip,
 )
+from budget_app.utils.table import configure_table_header
 
 
 class PayslipReviewDialog(QDialog):
@@ -117,6 +118,7 @@ class PayslipReviewDialog(QDialog):
         self.earnings_table.setMinimumHeight(190)
 
         header = self.earnings_table.horizontalHeader()
+        configure_table_header(header)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
 
         for column in range(1, 4):

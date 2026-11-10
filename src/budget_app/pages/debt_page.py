@@ -37,6 +37,7 @@ from budget_app.services.debt_service import (
     update_debt,
 )
 from budget_app.utils.money import format_money
+from budget_app.utils.table import configure_table_header
 
 
 class DebtDialog(QDialog):
@@ -411,6 +412,7 @@ class DebtPage(QWidget):
         self.debt_table.verticalHeader().setDefaultSectionSize(42)
 
         header = self.debt_table.horizontalHeader()
+        configure_table_header(header)
         header.setSectionResizeMode(
             0,
             QHeaderView.ResizeMode.Stretch,
@@ -421,6 +423,9 @@ class DebtPage(QWidget):
                 column,
                 QHeaderView.ResizeMode.ResizeToContents,
             )
+
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(5, 112)
 
         self.debt_table.setMinimumHeight(300)
         self.debt_table.itemSelectionChanged.connect(self._update_action_buttons)

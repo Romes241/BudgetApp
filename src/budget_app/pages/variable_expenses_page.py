@@ -30,6 +30,7 @@ from budget_app.services.variable_expense_service import (
     update_variable_expense,
 )
 from budget_app.utils.money import format_money, to_pence
+from budget_app.utils.table import configure_table_header
 
 
 class VariableExpenseDialog(QDialog):
@@ -243,6 +244,7 @@ class VariableExpensesPage(QWidget):
         self.expense_table.verticalHeader().setVisible(False)
 
         header = self.expense_table.horizontalHeader()
+        configure_table_header(header)
         header.setSectionResizeMode(
             0,
             QHeaderView.ResizeMode.Stretch,

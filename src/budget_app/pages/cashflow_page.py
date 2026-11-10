@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from budget_app.services.cashflow_service import generate_cashflow_projection
 from budget_app.utils.money import format_money
+from budget_app.utils.table import configure_table_header
 
 
 class SummaryCard(QFrame):
@@ -176,6 +177,7 @@ class CashflowPage(QWidget):
         self.transaction_table.verticalHeader().setVisible(False)
 
         header = self.transaction_table.horizontalHeader()
+        configure_table_header(header)
         header.setSectionResizeMode(
             0,
             QHeaderView.ResizeMode.ResizeToContents,
