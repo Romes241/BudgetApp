@@ -31,6 +31,7 @@ from budget_app.services.income_service import (
     update_income,
 )
 from budget_app.utils.money import format_money, to_pence
+from budget_app.utils.table import configure_table_header
 
 
 class IncomeDialog(QDialog):
@@ -320,6 +321,7 @@ class IncomePage(QWidget):
         )
 
         header = self.income_table.horizontalHeader()
+        configure_table_header(header)
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         header.setStretchLastSection(True)
 

@@ -12,6 +12,10 @@ QFrame#sidebar {
 }
 
 /* Labels */
+QLabel {
+    background-color: transparent;
+}
+
 QLabel#appTitle {
     background-color: transparent;
     font-size: 21px;

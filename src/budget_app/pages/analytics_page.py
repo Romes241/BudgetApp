@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from budget_app.services.analytics_service import get_financial_analytics
 from budget_app.utils.money import format_money
+from budget_app.utils.table import configure_table_header
 
 
 def _compact_money(amount_pence: int) -> str:
@@ -485,6 +486,7 @@ class AnalyticsPage(QWidget):
         table.setAlternatingRowColors(True)
         table.setShowGrid(False)
         header = table.horizontalHeader()
+        configure_table_header(header)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         for column in range(1, len(headers)):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
