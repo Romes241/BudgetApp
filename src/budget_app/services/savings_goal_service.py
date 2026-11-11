@@ -146,6 +146,7 @@ def record_savings_transaction(
     transaction_type: str,
     amount: str | float | Decimal,
     transaction_date: str | date,
+    forecast_key: str | None = None,
 ) -> bool:
     """Record a deposit or withdrawal and atomically update the saved balance."""
     if transaction_type not in {"deposit", "withdrawal"}:
@@ -167,9 +168,10 @@ def record_savings_transaction(
         delta = amount_pence if transaction_type == "deposit" else -amount_pence
         connection.execute(
             """INSERT INTO savings_goal_transactions
-                (goal_id, transaction_type, amount_pence, transaction_date)
-                VALUES (?, ?, ?, ?)""",
-            (goal_id, transaction_type, amount_pence, validated_date),
+                (goal_id, transaction_type, amount_pence, transaction_date,
+                 forecast_key)
+                VALUES (?, ?, ?, ?, ?)""",
+            (goal_id, transaction_type, amount_pence, validated_date, forecast_key),
         )
         connection.execute(
             "UPDATE savings_goals SET current_amount_pence = current_amount_pence + ? WHERE id = ?",

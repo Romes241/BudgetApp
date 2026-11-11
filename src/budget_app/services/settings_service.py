@@ -1,6 +1,6 @@
 """Operations for reading and updating application settings."""
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
@@ -109,6 +109,16 @@ def _validate_next_pay_date(value: str | date | None) -> str | None:
     return value
 
 
+def _validate_balance_date(value: str | date | None) -> str:
+    """Validate the calendar date used for manual balance reconciliation."""
+    if value is None:
+        return date.today().isoformat()
+    validated = _validate_next_pay_date(value)
+    if validated is None or date.fromisoformat(validated) > date.today():
+        raise ValueError("Balance date cannot be in the future.")
+    return validated
+
+
 def get_settings() -> dict:
     """Return application settings using pounds for monetary values."""
 
@@ -196,6 +206,7 @@ def save_settings(
     pay_frequency: Any,
     next_pay_date: str | date | None,
     early_payment_offset_days: Any,
+    balance_as_of_date: str | date | None = None,
 ) -> None:
     """Validate and persist the complete application settings form."""
 
@@ -230,13 +241,34 @@ def save_settings(
             0,
             7,
         ),
+        "balance_as_of_date": _validate_balance_date(balance_as_of_date),
     }
 
     with database_connection() as connection:
+        existing_balance = connection.execute(
+            """SELECT current_balance_pence, balance_as_of_date,
+                balance_reconciled_at FROM settings WHERE id = 1"""
+        ).fetchone()
+        if existing_balance is None:
+            raise RuntimeError("BudgetApp settings have not been initialised.")
+        if (
+            int(existing_balance["current_balance_pence"])
+            == values["current_balance_pence"]
+            and existing_balance["balance_as_of_date"] == values["balance_as_of_date"]
+        ):
+            values["balance_reconciled_at"] = existing_balance["balance_reconciled_at"]
+        else:
+            values["balance_reconciled_at"] = (
+                datetime.now(UTC)
+                .isoformat(timespec="milliseconds")
+                .replace("+00:00", "Z")
+            )
         cursor = connection.execute(
             """
             UPDATE settings
             SET current_balance_pence = :current_balance_pence,
+                balance_as_of_date = :balance_as_of_date,
+                balance_reconciled_at = :balance_reconciled_at,
                 hourly_wage_pence = :hourly_wage_pence,
                 average_hours = :average_hours,
                 tax_code = :tax_code,
