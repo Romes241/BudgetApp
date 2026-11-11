@@ -195,10 +195,9 @@ class DebtPaymentDialog(QDialog):
         layout.addLayout(form)
 
         note = QLabel(
-            "Recording a payment updates the balance and last payment date. "
-            "Because the app currently stores only the latest payment date, "
-            "any recorded payment marks that calendar month's scheduled "
-            "repayment as already made in Cashflow."
+            "Recording a payment updates the outstanding debt, retains the "
+            "payment date and amount, and applies it to the account running "
+            "balance. Cashflow avoids projecting that month's payment again."
         )
         note.setObjectName("secondaryText")
         note.setWordWrap(True)
@@ -444,8 +443,8 @@ class DebtPage(QWidget):
 
         note = QLabel(
             "Debt interest is not currently modelled. Paid down is calculated "
-            "from original balance minus current balance. Payment history is "
-            "not retained; only the latest payment date is stored."
+            "from original balance minus current balance. Recorded payments are "
+            "retained and applied to the account running balance."
         )
         note.setObjectName("secondaryText")
         note.setWordWrap(True)

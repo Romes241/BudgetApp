@@ -3,13 +3,20 @@
 from datetime import date
 from typing import ClassVar
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QComboBox,
+    QDateEdit,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -18,7 +25,20 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from budget_app.services.cashflow_service import generate_cashflow_projection
+from budget_app.services.balance_service import (
+    add_actual_transaction,
+    delete_actual_transaction,
+    delete_recorded_transaction,
+    get_actual_transactions,
+    update_actual_transaction,
+    update_recorded_transaction,
+)
+from budget_app.services.cashflow_service import (
+    forecast_entry_key,
+    generate_cashflow_projection,
+)
+from budget_app.services.debt_service import record_debt_payment
+from budget_app.services.savings_goal_service import record_savings_transaction
 from budget_app.utils.money import format_money
 from budget_app.utils.table import configure_table_header
 
@@ -154,11 +174,50 @@ class CashflowPage(QWidget):
         self.payroll_summary_label.setWordWrap(True)
         main_layout.addWidget(self.payroll_summary_label)
 
+        actual_heading = QHBoxLayout()
+        actual_heading.addWidget(QLabel("Recorded actual spending and confirmations"))
+        actual_heading.addStretch()
+        self.add_actual_button = QPushButton("Record transaction")
+        self.add_actual_button.clicked.connect(self.add_actual_spending)
+        actual_heading.addWidget(self.add_actual_button)
+        self.edit_actual_button = QPushButton("Edit selected")
+        self.edit_actual_button.clicked.connect(self.edit_actual_spending)
+        actual_heading.addWidget(self.edit_actual_button)
+        self.delete_actual_button = QPushButton("Delete selected")
+        self.delete_actual_button.clicked.connect(self.delete_actual_spending)
+        actual_heading.addWidget(self.delete_actual_button)
+        main_layout.addLayout(actual_heading)
+
+        self.actual_table = QTableWidget(0, 4)
+        self.actual_table.setHorizontalHeaderLabels(
+            ["Date", "Type", "Description", "Amount"]
+        )
+        self.actual_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.actual_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.actual_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.actual_table.verticalHeader().setVisible(False)
+        actual_header = self.actual_table.horizontalHeader()
+        configure_table_header(actual_header)
+        actual_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        actual_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        actual_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        actual_header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.actual_table.setMaximumHeight(190)
+        self.actual_table.itemSelectionChanged.connect(self._update_actual_actions)
+        main_layout.addWidget(self.actual_table)
+
         # Ledger heading.
         ledger_heading = QLabel("Projected transactions")
         ledger_heading.setObjectName("sectionHeading")
-
-        main_layout.addWidget(ledger_heading)
+        ledger_heading_row = QHBoxLayout()
+        ledger_heading_row.addWidget(ledger_heading)
+        ledger_heading_row.addStretch()
+        self.confirm_forecast_button = QPushButton("Confirm selected transaction")
+        self.confirm_forecast_button.clicked.connect(self.confirm_forecast_transaction)
+        ledger_heading_row.addWidget(self.confirm_forecast_button)
+        main_layout.addLayout(ledger_heading_row)
 
         # Transaction table.
         self.transaction_table = QTableWidget(0, len(self.HEADERS))
@@ -200,6 +259,9 @@ class CashflowPage(QWidget):
         )
 
         self.transaction_table.setMinimumHeight(300)
+        self.transaction_table.itemSelectionChanged.connect(
+            self._update_forecast_actions
+        )
 
         main_layout.addWidget(self.transaction_table, 1)
 
@@ -219,6 +281,7 @@ class CashflowPage(QWidget):
             self._update_summary()
             self._update_payroll_summary()
             self._populate_table()
+            self._populate_actual_transactions()
 
             self.status_label.setText(
                 f"Last updated: {date.today().strftime('%d/%m/%Y')}"
@@ -268,6 +331,9 @@ class CashflowPage(QWidget):
         total_income = self.projection["total_income_pence"]
         total_outgoings = self.projection["total_outgoings_pence"]
 
+        self.current_balance_card.title_label.setText(
+            f"Current balance · as of {date.today():%d/%m/%Y}"
+        )
         self.current_balance_card.set_value(
             format_money(opening_balance),
             negative=opening_balance < 0,
@@ -385,6 +451,10 @@ class CashflowPage(QWidget):
                     item,
                 )
 
+            self.transaction_table.item(row_index, 1).setData(
+                Qt.ItemDataRole.UserRole, entry
+            )
+
             # Colour-code the transaction description by type.
             transaction_type = entry["type"]
             colour = self.TYPE_COLOURS.get(transaction_type)
@@ -416,3 +486,223 @@ class CashflowPage(QWidget):
                     item.setForeground(QColor("#ffffff"))
 
         self.transaction_table.resizeRowsToContents()
+        self._update_forecast_actions()
+
+    def _update_forecast_actions(self) -> None:
+        row = self.transaction_table.currentRow()
+        entry = (
+            self.transaction_table.item(row, 1).data(Qt.ItemDataRole.UserRole)
+            if row >= 0
+            else None
+        )
+        self.confirm_forecast_button.setEnabled(
+            bool(entry and entry.get("type") != "starting_balance")
+        )
+
+    def confirm_forecast_transaction(self) -> None:
+        """Record a forecast row at its actual date and amount."""
+        row = self.transaction_table.currentRow()
+        if row < 0:
+            return
+        entry = self.transaction_table.item(row, 1).data(Qt.ItemDataRole.UserRole)
+        if not entry or entry.get("type") == "starting_balance":
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Confirm completed transaction")
+        form = QFormLayout(dialog)
+        amount = QDoubleSpinBox()
+        amount.setRange(0.01, 999999999.99)
+        amount.setDecimals(2)
+        amount.setPrefix("£")
+        amount.setValue(abs(int(entry["amount_pence"])) / 100)
+        transaction_date = QDateEdit()
+        transaction_date.setCalendarPopup(True)
+        transaction_date.setDisplayFormat("dd MMM yyyy")
+        transaction_date.setDate(QDate.currentDate())
+        transaction_date.setMaximumDate(QDate.currentDate())
+        form.addRow("Actual amount", amount)
+        form.addRow("Actual date", transaction_date)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        actual_amount = amount.value()
+        actual_amount = (
+            actual_amount if int(entry["amount_pence"]) > 0 else -actual_amount
+        )
+        actual_date = transaction_date.date().toString("yyyy-MM-dd")
+        try:
+            if entry["type"] == "debt_repayment":
+                recorded = record_debt_payment(
+                    entry["source_id"],
+                    abs(actual_amount),
+                    actual_date,
+                    forecast_key=forecast_entry_key(entry),
+                )
+                if not recorded:
+                    raise ValueError("The related debt no longer exists.")
+            elif entry["type"] == "savings_contribution":
+                recorded = record_savings_transaction(
+                    entry["source_id"],
+                    "deposit",
+                    abs(actual_amount),
+                    actual_date,
+                    forecast_key=forecast_entry_key(entry),
+                )
+                if not recorded:
+                    raise ValueError("The related savings goal no longer exists.")
+            else:
+                add_actual_transaction(
+                    entry["description"],
+                    actual_amount,
+                    actual_date,
+                    transaction_type=entry["type"],
+                    forecast_key=forecast_entry_key(entry),
+                )
+            self.refresh_projection()
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
+            QMessageBox.warning(self, "Could not confirm transaction", str(exc))
+
+    def _populate_actual_transactions(self) -> None:
+        """Show manually recorded actual spending."""
+        records = get_actual_transactions()
+        self.actual_table.setRowCount(len(records))
+        for row, record in enumerate(records):
+            values = [
+                date.fromisoformat(record["transaction_date"]).strftime("%d/%m/%Y"),
+                record["transaction_type"].replace("_", " ").title(),
+                record["description"],
+                format_money(abs(record["amount_pence"])),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                self.actual_table.setItem(row, column, item)
+            self.actual_table.item(row, 0).setData(
+                Qt.ItemDataRole.UserRole, record["id"]
+            )
+            self.actual_table.item(row, 0).setData(
+                Qt.ItemDataRole.UserRole + 1, record["transaction_date"]
+            )
+            self.actual_table.item(row, 0).setData(
+                Qt.ItemDataRole.UserRole + 2, record["amount"]
+            )
+            self.actual_table.item(row, 0).setData(
+                Qt.ItemDataRole.UserRole + 3, record["source_kind"]
+            )
+        self._update_actual_actions()
+
+    def _update_actual_actions(self) -> None:
+        selected = self.actual_table.currentRow() >= 0
+        self.edit_actual_button.setEnabled(selected)
+        self.delete_actual_button.setEnabled(selected)
+
+    def _actual_spending_dialog(self, record: dict | None = None) -> dict | None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(
+            "Edit recorded transaction" if record else "Record actual transaction"
+        )
+        form = QFormLayout(dialog)
+        description = QLineEdit(record["description"] if record else "")
+        if record and record.get("source_kind") != "manual":
+            description.setEnabled(False)
+        direction = QComboBox()
+        direction.addItem("Money out", -1)
+        direction.addItem("Money in", 1)
+        if record and int(record["amount_pence"]) > 0:
+            direction.setCurrentIndex(1)
+        amount = QDoubleSpinBox()
+        amount.setRange(0.01, 999999999.99)
+        amount.setDecimals(2)
+        amount.setPrefix("£")
+        amount.setValue(float(record["amount"]) if record else 0.01)
+        transaction_date = QDateEdit()
+        transaction_date.setCalendarPopup(True)
+        transaction_date.setDisplayFormat("dd MMM yyyy")
+        transaction_date.setDate(
+            QDate.fromString(record["transaction_date"], "yyyy-MM-dd")
+            if record
+            else QDate.currentDate()
+        )
+        form.addRow("Description", description)
+        form.addRow("Direction", direction)
+        form.addRow("Amount", amount)
+        form.addRow("Date", transaction_date)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return {
+            "description": description.text(),
+            "amount": amount.value() * direction.currentData(),
+            "transaction_date": transaction_date.date().toString("yyyy-MM-dd"),
+        }
+
+    def add_actual_spending(self) -> None:
+        values = self._actual_spending_dialog()
+        if values is None:
+            return
+        try:
+            add_actual_transaction(**values)
+            self.refresh_projection()
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
+            QMessageBox.warning(self, "Could not record spending", str(exc))
+
+    def edit_actual_spending(self) -> None:
+        row = self.actual_table.currentRow()
+        if row < 0:
+            return
+        item = self.actual_table.item(row, 0)
+        record = {
+            "id": item.data(Qt.ItemDataRole.UserRole),
+            "source_kind": item.data(Qt.ItemDataRole.UserRole + 3),
+            "transaction_date": item.data(Qt.ItemDataRole.UserRole + 1),
+            "amount": abs(float(item.data(Qt.ItemDataRole.UserRole + 2))),
+            "amount_pence": round(float(item.data(Qt.ItemDataRole.UserRole + 2)) * 100),
+            "description": self.actual_table.item(row, 2).text(),
+        }
+        values = self._actual_spending_dialog(record)
+        if values is None:
+            return
+        try:
+            if record["source_kind"] == "manual":
+                update_actual_transaction(record["id"], **values)
+            else:
+                update_recorded_transaction(
+                    record["source_kind"],
+                    record["id"],
+                    values["amount"],
+                    values["transaction_date"],
+                )
+            self.refresh_projection()
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
+            QMessageBox.warning(self, "Could not update spending", str(exc))
+
+    def delete_actual_spending(self) -> None:
+        row = self.actual_table.currentRow()
+        if row < 0:
+            return
+        transaction_id = self.actual_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        source_kind = self.actual_table.item(row, 0).data(Qt.ItemDataRole.UserRole + 3)
+        answer = QMessageBox.question(
+            self,
+            "Delete actual spending",
+            "Delete the selected recorded transaction? This will update its "
+            "income, debt or savings record where applicable.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            if source_kind == "manual":
+                delete_actual_transaction(transaction_id)
+            else:
+                delete_recorded_transaction(source_kind, transaction_id)
+            self.refresh_projection()

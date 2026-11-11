@@ -96,8 +96,10 @@ class MainWindow(QMainWindow):
         fixed_expenses_page = FixedExpensesPage()
         variable_expenses_page = VariableExpensesPage()
         income_page = IncomePage()
+        income_page.income_changed.connect(cashflow_page.refresh_projection)
         payslip_import_page = PayslipImportPage(income_page=income_page)
         settings_page = SettingsPage()
+        settings_page.settings_saved.connect(cashflow_page.refresh_projection)
         self.simulator_page = SimulatorPage()
 
         self.page_stack.addWidget(dashboard_page)
