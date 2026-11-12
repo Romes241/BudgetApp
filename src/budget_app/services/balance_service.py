@@ -1,6 +1,6 @@
 """Calculate the live account balance from a reconciled baseline and activity."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -23,9 +23,12 @@ def get_running_balance() -> dict[str, Any]:
         today = date.today().isoformat()
         totals = connection.execute(
             """SELECT
-                COALESCE((SELECT SUM(net_pay_pence) FROM income_history
-                    WHERE (pay_date > ? OR (pay_date = ? AND created_at > ?))
-                    AND pay_date <= ?), 0) AS income_pence,
+                COALESCE((SELECT SUM(i.net_pay_pence) FROM income_history AS i
+                    WHERE (i.pay_date > ? OR
+                        (i.pay_date = ? AND i.created_at > ?))
+                    AND i.pay_date <= ?
+                    AND NOT EXISTS (SELECT 1 FROM actual_transactions AS t
+                        WHERE t.linked_income_id = i.id)), 0) AS income_pence,
                 COALESCE((SELECT SUM(CASE transaction_type
                     WHEN 'deposit' THEN -amount_pence ELSE amount_pence END)
                     FROM savings_goal_transactions
@@ -41,10 +44,7 @@ def get_running_balance() -> dict[str, Any]:
                     WHERE (t.transaction_date > ? OR
                         (t.transaction_date = ? AND t.created_at > ?))
                     AND t.transaction_date <= ?
-                    AND NOT (t.transaction_type = 'regular_income' AND EXISTS (
-                        SELECT 1 FROM income_history AS i
-                        WHERE i.pay_date = t.transaction_date
-                    ))), 0)
+                    ), 0)
                     AS other_pence""",
             (
                 baseline_date.isoformat(),
@@ -128,22 +128,25 @@ def get_actual_transactions() -> list[dict[str, Any]]:
     with database_connection() as connection:
         rows = connection.execute(
             """SELECT id, transaction_date, description, amount_pence,
-                    transaction_type, forecast_key, 'manual' AS source_kind
+                    transaction_type, forecast_key, linked_income_id,
+                    'manual' AS source_kind
                 FROM actual_transactions
                 UNION ALL
                 SELECT id, pay_date, 'Income', net_pay_pence,
-                    'income', NULL, 'income' FROM income_history
+                    'income', NULL, NULL, 'income' FROM income_history AS i
+                WHERE NOT EXISTS (SELECT 1 FROM actual_transactions AS t
+                    WHERE t.linked_income_id = i.id)
                 UNION ALL
                 SELECT t.id, t.transaction_date,
                     g.name || ' ' || t.transaction_type,
                     CASE t.transaction_type WHEN 'deposit' THEN -t.amount_pence
                         ELSE t.amount_pence END,
-                    'savings_' || t.transaction_type, t.forecast_key, 'savings'
+                    'savings_' || t.transaction_type, t.forecast_key, NULL, 'savings'
                 FROM savings_goal_transactions AS t
                 JOIN savings_goals AS g ON g.id = t.goal_id
                 UNION ALL
                 SELECT t.id, t.payment_date, d.name || ' payment',
-                    -t.amount_pence, 'debt_payment', t.forecast_key, 'debt'
+                    -t.amount_pence, 'debt_payment', t.forecast_key, NULL, 'debt'
                 FROM debt_payment_transactions AS t
                 JOIN debts AS d ON d.id = t.debt_id
                 ORDER BY 2 DESC, 1 DESC"""
@@ -151,11 +154,82 @@ def get_actual_transactions() -> list[dict[str, Any]]:
     return [{**dict(row), "amount": from_pence(row["amount_pence"])} for row in rows]
 
 
+def get_linkable_income_records(transaction_id: int) -> list[dict[str, Any]]:
+    """Return unlinked payslips dated within a week after a confirmed payday."""
+    with database_connection() as connection:
+        transaction = connection.execute(
+            """SELECT transaction_date, transaction_type, linked_income_id
+                FROM actual_transactions WHERE id = ?""",
+            (transaction_id,),
+        ).fetchone()
+        if transaction is None or transaction["transaction_type"] != "regular_income":
+            return []
+        transaction_date = date.fromisoformat(transaction["transaction_date"])
+        latest_pay_date = (transaction_date + timedelta(days=7)).isoformat()
+        rows = connection.execute(
+            """SELECT i.id, i.pay_date, i.net_pay_pence
+                FROM income_history AS i
+                WHERE i.pay_date >= ? AND i.pay_date <= ?
+                  AND NOT EXISTS (
+                    SELECT 1 FROM actual_transactions AS t
+                    WHERE t.linked_income_id = i.id
+                  )
+                ORDER BY i.pay_date DESC, i.id DESC""",
+            (transaction["transaction_date"], latest_pay_date),
+        ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "pay_date": row["pay_date"],
+            "net_pay_pence": row["net_pay_pence"],
+            "net_pay": from_pence(row["net_pay_pence"]),
+        }
+        for row in rows
+    ]
+
+
+def link_confirmed_income_to_payslip(
+    transaction_id: int,
+    income_id: int,
+) -> bool:
+    """Link a confirmed bank receipt to its contractual-date payslip record."""
+    with database_connection() as connection:
+        transaction = connection.execute(
+            """SELECT transaction_date, transaction_type, linked_income_id
+                FROM actual_transactions WHERE id = ?""",
+            (transaction_id,),
+        ).fetchone()
+        if transaction is None:
+            return False
+        if transaction["transaction_type"] != "regular_income":
+            raise ValueError("Only confirmed regular income can link to a payslip.")
+        if transaction["linked_income_id"] is not None:
+            raise ValueError("This confirmed income is already linked to a payslip.")
+        income = connection.execute(
+            "SELECT pay_date FROM income_history WHERE id = ?", (income_id,)
+        ).fetchone()
+        if income is None:
+            return False
+        receipt_date = date.fromisoformat(transaction["transaction_date"])
+        pay_date = date.fromisoformat(income["pay_date"])
+        if not receipt_date <= pay_date <= receipt_date + timedelta(days=7):
+            raise ValueError(
+                "The payslip date must be within a week after the receipt."
+            )
+        cursor = connection.execute(
+            """UPDATE actual_transactions SET linked_income_id = ?
+                WHERE id = ? AND linked_income_id IS NULL""",
+            (income_id, transaction_id),
+        )
+        return cursor.rowcount > 0
+
+
 def update_actual_transaction(
     transaction_id: int,
     description: str,
     amount: str | float | Decimal,
     transaction_date: str | date,
+    transaction_type: str | None = None,
 ) -> bool:
     """Edit an actual transaction and recalculate balance on next read."""
     if not isinstance(description, str) or not description.strip():
@@ -174,12 +248,32 @@ def update_actual_transaction(
     if amount_pence == 0:
         raise ValueError("Transaction amount cannot be zero.")
     with database_connection() as connection:
+        existing = connection.execute(
+            "SELECT linked_income_id FROM actual_transactions WHERE id = ?",
+            (transaction_id,),
+        ).fetchone()
+        if (
+            existing is not None
+            and existing["linked_income_id"] is not None
+            and transaction_type not in {None, "regular_income"}
+        ):
+            raise ValueError(
+                "A payslip-linked receipt must remain money in. Delete it to "
+                "use the payslip record on its own."
+            )
         cursor = connection.execute(
             """UPDATE actual_transactions
                 SET transaction_date = ?, description = ?, amount_pence = ?,
+                    transaction_type = COALESCE(?, transaction_type),
                     created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                 WHERE id = ?""",
-            (transaction_date, description.strip(), amount_pence, transaction_id),
+            (
+                transaction_date,
+                description.strip(),
+                amount_pence,
+                transaction_type,
+                transaction_id,
+            ),
         )
         return cursor.rowcount > 0
 
@@ -225,15 +319,10 @@ def update_recorded_transaction(
             )
             return cursor.rowcount > 0
         if source_kind == "income":
-            if amount_pence < 0:
-                raise ValueError("Income amount must be positive.")
-            cursor = connection.execute(
-                """UPDATE income_history SET pay_date = ?, net_pay_pence = ?,
-                    created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                    WHERE id = ?""",
-                (transaction_date, amount_pence, source_id),
+            raise ValueError(
+                "Edit payslip income using the Income page to keep its "
+                "pay and deduction details consistent."
             )
-            return cursor.rowcount > 0
         if source_kind == "savings":
             row = connection.execute(
                 """SELECT goal_id, transaction_type, amount_pence

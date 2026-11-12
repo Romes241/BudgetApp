@@ -150,3 +150,38 @@ def test_editing_and_deleting_debt_payment_updates_debt_and_balance(balance_data
         ).fetchone()
         assert debt["balance_pence"] == 10000
         assert debt["last_payment_date"] is None
+
+
+def test_linking_confirmed_early_pay_to_payslip_prevents_double_counting(
+    balance_database,
+):
+    today = date.today()
+    transaction_id = balance_service.add_actual_transaction(
+        "Estimated regular take-home pay",
+        "50",
+        today,
+        transaction_type="regular_income",
+    )
+    with balance_database() as connection:
+        cursor = connection.execute(
+            """INSERT INTO income_history
+                (pay_date, gross_pay_pence, net_pay_pence)
+                VALUES (?, 6000, 5000)""",
+            (today.isoformat(),),
+        )
+        income_id = cursor.lastrowid
+
+    assert balance_service.get_running_balance()["balance_pence"] == 20000
+    assert (
+        balance_service.get_linkable_income_records(transaction_id)[0]["id"]
+        == income_id
+    )
+    assert balance_service.link_confirmed_income_to_payslip(transaction_id, income_id)
+    assert balance_service.get_running_balance()["balance_pence"] == 15000
+
+    visible_income = [
+        transaction
+        for transaction in balance_service.get_actual_transactions()
+        if transaction["source_kind"] == "income"
+    ]
+    assert visible_income == []

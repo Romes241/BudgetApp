@@ -6,7 +6,7 @@ from pathlib import Path
 
 from budget_app.paths import get_database_path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 SCHEMA_SQL = """
@@ -536,6 +536,28 @@ def _migrate_to_v7(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_to_v8(connection: sqlite3.Connection) -> None:
+    """Allow confirmed forecast income to link to its imported payslip."""
+    columns = _table_columns(connection, "actual_transactions")
+    if "linked_income_id" not in columns:
+        connection.execute(
+            "ALTER TABLE actual_transactions ADD COLUMN linked_income_id INTEGER"
+        )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_actual_transactions_linked_income "
+        "ON actual_transactions(linked_income_id) WHERE linked_income_id IS NOT NULL"
+    )
+    connection.execute(
+        """CREATE TRIGGER IF NOT EXISTS trg_clear_actual_income_link
+            AFTER DELETE ON income_history
+            BEGIN
+                UPDATE actual_transactions
+                SET linked_income_id = NULL
+                WHERE linked_income_id = OLD.id;
+            END"""
+    )
+
+
 def initialise_database(
     connection: sqlite3.Connection,
 ) -> None:
@@ -575,6 +597,9 @@ def initialise_database(
 
         if current_version < 7:
             _migrate_to_v7(connection)
+
+        if current_version < 8:
+            _migrate_to_v8(connection)
 
         connection.execute("INSERT OR IGNORE INTO settings (id) VALUES (1)")
         connection.execute(

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -30,6 +31,8 @@ from budget_app.services.balance_service import (
     delete_actual_transaction,
     delete_recorded_transaction,
     get_actual_transactions,
+    get_linkable_income_records,
+    link_confirmed_income_to_payslip,
     update_actual_transaction,
     update_recorded_transaction,
 )
@@ -186,6 +189,9 @@ class CashflowPage(QWidget):
         self.delete_actual_button = QPushButton("Delete selected")
         self.delete_actual_button.clicked.connect(self.delete_actual_spending)
         actual_heading.addWidget(self.delete_actual_button)
+        self.link_income_button = QPushButton("Link payslip")
+        self.link_income_button.clicked.connect(self.link_income_to_payslip)
+        actual_heading.addWidget(self.link_income_button)
         main_layout.addLayout(actual_heading)
 
         self.actual_table = QTableWidget(0, 4)
@@ -575,7 +581,11 @@ class CashflowPage(QWidget):
         for row, record in enumerate(records):
             values = [
                 date.fromisoformat(record["transaction_date"]).strftime("%d/%m/%Y"),
-                record["transaction_type"].replace("_", " ").title(),
+                (
+                    "Regular income · payslip linked"
+                    if record.get("linked_income_id") is not None
+                    else record["transaction_type"].replace("_", " ").title()
+                ),
                 record["description"],
                 format_money(abs(record["amount_pence"])),
             ]
@@ -594,12 +604,76 @@ class CashflowPage(QWidget):
             self.actual_table.item(row, 0).setData(
                 Qt.ItemDataRole.UserRole + 3, record["source_kind"]
             )
+            self.actual_table.item(row, 0).setData(
+                Qt.ItemDataRole.UserRole + 4, record["transaction_type"]
+            )
+            self.actual_table.item(row, 0).setData(
+                Qt.ItemDataRole.UserRole + 5, record.get("linked_income_id")
+            )
         self._update_actual_actions()
 
     def _update_actual_actions(self) -> None:
-        selected = self.actual_table.currentRow() >= 0
-        self.edit_actual_button.setEnabled(selected)
+        row = self.actual_table.currentRow()
+        selected = row >= 0
+        source_kind = (
+            self.actual_table.item(row, 0).data(Qt.ItemDataRole.UserRole + 3)
+            if selected
+            else None
+        )
+        self.edit_actual_button.setEnabled(selected and source_kind != "income")
+        self.edit_actual_button.setToolTip(
+            "Edit income using the Income page so payslip amounts stay consistent."
+            if source_kind == "income"
+            else "Edit the selected recorded transaction."
+        )
         self.delete_actual_button.setEnabled(selected)
+        linkable = False
+        if selected:
+            item = self.actual_table.item(row, 0)
+            linkable = (
+                item.data(Qt.ItemDataRole.UserRole + 3) == "manual"
+                and item.data(Qt.ItemDataRole.UserRole + 4) == "regular_income"
+                and item.data(Qt.ItemDataRole.UserRole + 5) is None
+            )
+        self.link_income_button.setEnabled(linkable)
+
+    def link_income_to_payslip(self) -> None:
+        """Link an early bank receipt to its contractual-date payslip."""
+        row = self.actual_table.currentRow()
+        if row < 0:
+            return
+        transaction_id = self.actual_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        try:
+            income_records = get_linkable_income_records(transaction_id)
+            if not income_records:
+                QMessageBox.information(
+                    self,
+                    "No matching payslips",
+                    "There are no unlinked payslips dated within a week after "
+                    "this confirmed pay date.",
+                )
+                return
+            labels = [
+                f"{date.fromisoformat(record['pay_date']):%d/%m/%Y} · "
+                f"{format_money(record['net_pay_pence'])} · ID {record['id']}"
+                for record in income_records
+            ]
+            selected, accepted = QInputDialog.getItem(
+                self,
+                "Link confirmed income",
+                "Choose the payslip for this bank receipt:",
+                labels,
+                0,
+                False,
+            )
+            if not accepted:
+                return
+            income_id = income_records[labels.index(selected)]["id"]
+            if not link_confirmed_income_to_payslip(transaction_id, income_id):
+                raise ValueError("The selected income record could not be linked.")
+            self.refresh_projection()
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
+            QMessageBox.warning(self, "Could not link payslip", str(exc))
 
     def _actual_spending_dialog(self, record: dict | None = None) -> dict | None:
         dialog = QDialog(self)
@@ -615,6 +689,8 @@ class CashflowPage(QWidget):
         direction.addItem("Money in", 1)
         if record and int(record["amount_pence"]) > 0:
             direction.setCurrentIndex(1)
+        if record and record.get("linked_income_id") is not None:
+            direction.setEnabled(False)
         amount = QDoubleSpinBox()
         amount.setRange(0.01, 999999999.99)
         amount.setDecimals(2)
@@ -645,6 +721,9 @@ class CashflowPage(QWidget):
             "description": description.text(),
             "amount": amount.value() * direction.currentData(),
             "transaction_date": transaction_date.date().toString("yyyy-MM-dd"),
+            "transaction_type": (
+                "regular_income" if direction.currentData() > 0 else "expense"
+            ),
         }
 
     def add_actual_spending(self) -> None:
@@ -665,6 +744,7 @@ class CashflowPage(QWidget):
         record = {
             "id": item.data(Qt.ItemDataRole.UserRole),
             "source_kind": item.data(Qt.ItemDataRole.UserRole + 3),
+            "linked_income_id": item.data(Qt.ItemDataRole.UserRole + 5),
             "transaction_date": item.data(Qt.ItemDataRole.UserRole + 1),
             "amount": abs(float(item.data(Qt.ItemDataRole.UserRole + 2))),
             "amount_pence": round(float(item.data(Qt.ItemDataRole.UserRole + 2)) * 100),

@@ -480,6 +480,9 @@ class PayslipImportPage(QWidget):
 
         if self.income_page is not None:
             self.income_page.refresh_income()
+            income_changed = getattr(self.income_page, "income_changed", None)
+            if income_changed is not None:
+                income_changed.emit()
 
         QMessageBox.information(
             self,
