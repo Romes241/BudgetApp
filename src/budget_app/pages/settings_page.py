@@ -156,15 +156,21 @@ class SettingsPage(QWidget):
     def _build_balance_card(self, grid: QGridLayout) -> None:
         card, layout = self._create_card(
             "Account & forecast",
-            "Set the balance used as the opening point for your cashflow projection.",
+            "Reconcile your account balance here. Recorded activity after the date "
+            "is applied automatically; future forecasts remain projections.",
         )
         form = self._create_form()
 
         self.current_balance_input = self._create_money_input(allow_negative=True)
         self.current_balance_input.setToolTip(
-            "Your current account balance. A negative value can be used "
+            "Your reconciled account balance on the date below. A negative value can be used "
             "for an overdraft."
         )
+
+        self.balance_as_of_date_input = QDateEdit()
+        self.balance_as_of_date_input.setCalendarPopup(True)
+        self.balance_as_of_date_input.setDisplayFormat("dd MMM yyyy")
+        self.balance_as_of_date_input.setMinimumWidth(155)
 
         self.projection_months_input = QSpinBox()
         self.projection_months_input.setRange(1, 120)
@@ -173,7 +179,8 @@ class SettingsPage(QWidget):
             "The number of months included in the cashflow projection."
         )
 
-        form.addRow("Current balance", self.current_balance_input)
+        form.addRow("Reconciled balance", self.current_balance_input)
+        form.addRow("Balance date", self.balance_as_of_date_input)
         form.addRow("Forecast duration", self.projection_months_input)
         layout.addLayout(form)
         grid.addWidget(card, 0, 0)
@@ -338,6 +345,13 @@ class SettingsPage(QWidget):
             self.pension_estimate = get_pension_estimate()
 
             self.current_balance_input.setValue(float(settings["current_balance"]))
+            baseline_date = settings.get("balance_as_of_date")
+            if baseline_date:
+                self.balance_as_of_date_input.setDate(
+                    QDate.fromString(baseline_date, "yyyy-MM-dd")
+                )
+            else:
+                self.balance_as_of_date_input.setDate(QDate.currentDate())
             self.projection_months_input.setValue(settings["projection_months"])
             self.hourly_wage_input.setValue(float(settings["hourly_wage"]))
             self.average_hours_input.setValue(settings["average_hours"])
@@ -447,6 +461,9 @@ class SettingsPage(QWidget):
 
         return {
             "current_balance": self.current_balance_input.value(),
+            "balance_as_of_date": self.balance_as_of_date_input.date().toString(
+                "yyyy-MM-dd"
+            ),
             "hourly_wage": self.hourly_wage_input.value(),
             "average_hours": self.average_hours_input.value(),
             "tax_code": self.tax_code_input.text(),

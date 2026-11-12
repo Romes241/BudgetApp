@@ -28,6 +28,7 @@ def cashflow_database(tmp_path, monkeypatch):
         initialise_database(connection)
 
     for module in (
+        "budget_app.services.balance_service",
         "budget_app.services.cashflow_service",
         "budget_app.services.debt_service",
         "budget_app.services.fixed_expense_service",

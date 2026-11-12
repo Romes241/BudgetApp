@@ -6,13 +6,15 @@ from pathlib import Path
 
 from budget_app.paths import get_database_path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 8
 
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     current_balance_pence INTEGER NOT NULL DEFAULT 0,
+    balance_as_of_date TEXT NOT NULL DEFAULT '',
+    balance_reconciled_at TEXT NOT NULL DEFAULT '',
     hourly_wage_pence INTEGER NOT NULL DEFAULT 0,
     average_hours REAL NOT NULL DEFAULT 0,
     tax_code TEXT NOT NULL DEFAULT '1257L',
@@ -414,10 +416,8 @@ def _migrate_to_v6(connection: sqlite3.Connection) -> None:
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_savings_goals_active ON savings_goals(active)"
     )
-
     connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS savings_goal_transactions (
+        """CREATE TABLE IF NOT EXISTS savings_goal_transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             goal_id INTEGER NOT NULL,
             transaction_type TEXT NOT NULL
@@ -433,14 +433,128 @@ def _migrate_to_v6(connection: sqlite3.Connection) -> None:
                 AND date(transaction_date) = transaction_date
             ),
             FOREIGN KEY (goal_id) REFERENCES savings_goals(id) ON DELETE CASCADE
-        )
-        """
+        )"""
     )
     connection.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_savings_goal_transactions_goal_date
-        ON savings_goal_transactions(goal_id, transaction_date)
-        """
+        """CREATE INDEX IF NOT EXISTS idx_savings_goal_transactions_goal_date
+            ON savings_goal_transactions(goal_id, transaction_date)"""
+    )
+
+
+def _migrate_to_v7(connection: sqlite3.Connection) -> None:
+    """Add a dated balance baseline and actual outgoing transaction ledger."""
+    settings_columns = _table_columns(connection, "settings")
+    if "balance_as_of_date" not in settings_columns:
+        connection.execute(
+            "ALTER TABLE settings ADD COLUMN balance_as_of_date TEXT NOT NULL DEFAULT ''"
+        )
+    if "balance_reconciled_at" not in settings_columns:
+        connection.execute(
+            "ALTER TABLE settings ADD COLUMN balance_reconciled_at TEXT NOT NULL DEFAULT ''"
+        )
+    connection.execute(
+        "UPDATE settings SET balance_as_of_date = date('now', 'localtime') "
+        "WHERE balance_as_of_date = ''"
+    )
+    connection.execute(
+        "UPDATE settings SET balance_reconciled_at = "
+        "strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE balance_reconciled_at = ''"
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS actual_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_date TEXT NOT NULL,
+            description TEXT NOT NULL,
+            transaction_type TEXT NOT NULL DEFAULT 'expense',
+            amount_pence INTEGER NOT NULL CHECK (amount_pence != 0),
+            forecast_key TEXT,
+            created_at TEXT NOT NULL DEFAULT (
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            ),
+            CHECK (length(transaction_date) = 10
+                AND date(transaction_date) IS NOT NULL
+                AND date(transaction_date) = transaction_date)
+        )"""
+    )
+    actual_columns = _table_columns(connection, "actual_transactions")
+    if "transaction_type" not in actual_columns:
+        connection.execute(
+            "ALTER TABLE actual_transactions ADD COLUMN transaction_type "
+            "TEXT NOT NULL DEFAULT 'expense'"
+        )
+    if "forecast_key" not in actual_columns:
+        connection.execute(
+            "ALTER TABLE actual_transactions ADD COLUMN forecast_key TEXT"
+        )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_actual_transactions_forecast_key "
+        "ON actual_transactions(forecast_key) WHERE forecast_key IS NOT NULL"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_actual_transactions_date "
+        "ON actual_transactions(transaction_date)"
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS debt_payment_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            debt_id INTEGER NOT NULL,
+            payment_date TEXT NOT NULL,
+            amount_pence INTEGER NOT NULL CHECK (amount_pence > 0),
+            created_at TEXT NOT NULL DEFAULT (
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            ),
+            FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE,
+            CHECK (length(payment_date) = 10
+                AND date(payment_date) IS NOT NULL
+                AND date(payment_date) = payment_date)
+        )"""
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_debt_payment_transactions_date "
+        "ON debt_payment_transactions(payment_date)"
+    )
+    debt_columns = _table_columns(connection, "debt_payment_transactions")
+    if "forecast_key" not in debt_columns:
+        connection.execute(
+            "ALTER TABLE debt_payment_transactions ADD COLUMN forecast_key TEXT"
+        )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_debt_payment_forecast_key "
+        "ON debt_payment_transactions(forecast_key) WHERE forecast_key IS NOT NULL"
+    )
+
+    savings_transaction_columns = _table_columns(
+        connection, "savings_goal_transactions"
+    )
+    if "forecast_key" not in savings_transaction_columns:
+        connection.execute(
+            "ALTER TABLE savings_goal_transactions ADD COLUMN forecast_key TEXT"
+        )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_savings_transaction_forecast_key "
+        "ON savings_goal_transactions(forecast_key) WHERE forecast_key IS NOT NULL"
+    )
+
+
+def _migrate_to_v8(connection: sqlite3.Connection) -> None:
+    """Allow confirmed forecast income to link to its imported payslip."""
+    columns = _table_columns(connection, "actual_transactions")
+    if "linked_income_id" not in columns:
+        connection.execute(
+            "ALTER TABLE actual_transactions ADD COLUMN linked_income_id INTEGER"
+        )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_actual_transactions_linked_income "
+        "ON actual_transactions(linked_income_id) WHERE linked_income_id IS NOT NULL"
+    )
+    connection.execute(
+        """CREATE TRIGGER IF NOT EXISTS trg_clear_actual_income_link
+            AFTER DELETE ON income_history
+            BEGIN
+                UPDATE actual_transactions
+                SET linked_income_id = NULL
+                WHERE linked_income_id = OLD.id;
+            END"""
     )
 
 
@@ -481,7 +595,22 @@ def initialise_database(
         if current_version < 6:
             _migrate_to_v6(connection)
 
+        if current_version < 7:
+            _migrate_to_v7(connection)
+
+        if current_version < 8:
+            _migrate_to_v8(connection)
+
         connection.execute("INSERT OR IGNORE INTO settings (id) VALUES (1)")
+        connection.execute(
+            "UPDATE settings SET balance_as_of_date = date('now', 'localtime') "
+            "WHERE balance_as_of_date = ''"
+        )
+        connection.execute(
+            "UPDATE settings SET balance_reconciled_at = "
+            "strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+            "WHERE balance_reconciled_at = ''"
+        )
         connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         connection.commit()
 

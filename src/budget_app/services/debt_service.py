@@ -55,6 +55,8 @@ def _validate_payment_date(payment_date: str | date) -> str:
 
     if parsed_date.isoformat() != payment_date:
         raise ValueError("Payment date must use YYYY-MM-DD format.")
+    if parsed_date > date.today():
+        raise ValueError("Payment date cannot be in the future.")
 
     return payment_date
 
@@ -242,6 +244,7 @@ def record_debt_payment(
     debt_id: int,
     amount: str | float | Decimal,
     payment_date: str | date,
+    forecast_key: str | None = None,
 ) -> bool:
     """Record a payment against a debt.
 
@@ -281,6 +284,12 @@ def record_debt_payment(
             WHERE id = ?
             """,
             (amount_pence, validated_date, debt_id),
+        )
+        connection.execute(
+            """INSERT INTO debt_payment_transactions
+                (debt_id, payment_date, amount_pence, forecast_key)
+                VALUES (?, ?, ?, ?)""",
+            (debt_id, validated_date, amount_pence, forecast_key),
         )
 
     return True

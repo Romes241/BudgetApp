@@ -4,7 +4,7 @@ import sqlite3
 from decimal import Decimal
 from typing import ClassVar
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDateEdit,
@@ -245,6 +245,8 @@ class IncomePage(QWidget):
         "Net pay",
     ]
 
+    income_changed = Signal()
+
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
 
@@ -471,6 +473,7 @@ class IncomePage(QWidget):
             add_income(**dialog.get_values())
             if self.refresh_income():
                 self.status_label.setText("Income record added successfully.")
+                self.income_changed.emit()
 
         except (
             ValueError,
@@ -523,6 +526,7 @@ class IncomePage(QWidget):
 
             if self.refresh_income():
                 self.status_label.setText("Income record updated successfully.")
+                self.income_changed.emit()
 
         except (
             ValueError,
@@ -572,6 +576,7 @@ class IncomePage(QWidget):
 
             if self.refresh_income():
                 self.status_label.setText("Income record deleted successfully.")
+                self.income_changed.emit()
 
         except (
             ValueError,

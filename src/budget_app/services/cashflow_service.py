@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from budget_app.database import database_connection
+from budget_app.services.balance_service import get_running_balance
 from budget_app.services.debt_service import get_debts
 from budget_app.services.fixed_expense_service import get_fixed_expenses
 from budget_app.services.forecast_service import forecast_income_from_settings
@@ -40,6 +41,22 @@ def _due_date(year: int, month: int, due_day: int) -> date:
     """Return a monthly due date, clamping days such as the 31st."""
     day = min(due_day, calendar.monthrange(year, month)[1])
     return date(year, month, day)
+
+
+def forecast_entry_key(entry: dict[str, Any]) -> str:
+    """Return a stable key used to link a forecast row to its confirmation."""
+    entry_date = entry["date"]
+    date_key = (
+        entry_date.isoformat() if isinstance(entry_date, date) else str(entry_date)
+    )
+    return "|".join(
+        (
+            date_key,
+            entry["type"],
+            str(entry.get("source_id") or 0),
+            entry["description"],
+        )
+    )
 
 
 def _variable_weekly_entries(
@@ -122,7 +139,7 @@ def generate_cashflow_projection(
     with database_connection() as connection:
         settings = connection.execute(
             """
-            SELECT current_balance_pence, projection_months
+            SELECT projection_months
             FROM settings
             WHERE id = 1
             """
@@ -131,7 +148,7 @@ def generate_cashflow_projection(
     if settings is None:
         raise RuntimeError("BudgetApp settings have not been initialised.")
 
-    opening_balance_pence = int(settings["current_balance_pence"])
+    opening_balance_pence = int(get_running_balance()["balance_pence"])
     projection_months = int(settings["projection_months"])
 
     if not 1 <= projection_months <= 120:
@@ -140,6 +157,19 @@ def generate_cashflow_projection(
     end_date = _add_months(start_date, projection_months) - timedelta(days=1)
 
     with database_connection() as connection:
+        confirmed_rows = connection.execute(
+            """SELECT forecast_key FROM actual_transactions WHERE forecast_key IS NOT NULL
+                UNION SELECT forecast_key FROM debt_payment_transactions
+                    WHERE forecast_key IS NOT NULL
+                UNION SELECT forecast_key FROM savings_goal_transactions
+                    WHERE forecast_key IS NOT NULL"""
+        ).fetchall()
+        recorded_income_dates = {
+            row["pay_date"]
+            for row in connection.execute(
+                "SELECT DISTINCT pay_date FROM income_history"
+            )
+        }
         savings_goals = connection.execute(
             """SELECT id, name, target_amount_pence, current_amount_pence,
                 monthly_contribution_pence FROM savings_goals
@@ -309,6 +339,22 @@ def generate_cashflow_projection(
         "savings_contribution": 5,
         "savings_withdrawal": 0,
     }
+
+    confirmed_keys = {row["forecast_key"] for row in confirmed_rows}
+    entries = [
+        entry
+        for entry in entries
+        if forecast_entry_key(entry) not in confirmed_keys
+        and not (
+            entry["type"] == "regular_income"
+            and (
+                entry["date"].isoformat()
+                if isinstance(entry["date"], date)
+                else str(entry["date"])
+            )
+            in recorded_income_dates
+        )
+    ]
 
     entries.sort(
         key=lambda entry: (

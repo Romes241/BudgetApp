@@ -9,7 +9,7 @@ A personal finance desktop application built with Python, PySide6 and SQLite.
 - UK take-home pay estimates based on saved payroll settings
 - Fixed and variable expense budgets
 - Debt tracking and repayment projections
-- Cashflow forecasting
+- Cashflow forecasting with a running balance based on recorded income, savings and debt activity
 - Savings goals and contribution tracking
 - Financial analytics for recorded income, deductions, planned commitments and savings progress
 - What-if payroll scenarios using temporary pay and spending assumptions

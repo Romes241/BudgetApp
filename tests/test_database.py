@@ -276,7 +276,7 @@ def test_migration_updates_schema_version(tmp_path):
 
         version = connection.execute("PRAGMA user_version").fetchone()[0]
 
-        assert version == SCHEMA_VERSION == 6
+        assert version == SCHEMA_VERSION == 8
 
 
 def test_version_five_migration_preserves_savings_and_adds_ledger(tmp_path):
@@ -318,7 +318,7 @@ def test_version_five_migration_preserves_savings_and_adds_ledger(tmp_path):
         assert goal["monthly_contribution_pence"] == 0
         assert goal["active"] == 1
         assert "savings_goal_transactions" in tables
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
 
 
 def test_migration_is_safe_to_repeat(tmp_path):
@@ -391,7 +391,7 @@ def test_version_four_migration_adds_early_payment_offset(tmp_path):
         assert settings["early_payment_offset_days"] == 1
 
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        assert version == SCHEMA_VERSION == 6
+        assert version == SCHEMA_VERSION == 8
 
 
 def test_early_payment_offset_rejects_values_outside_supported_range(tmp_path):

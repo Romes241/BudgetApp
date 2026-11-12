@@ -225,7 +225,7 @@ def test_v3_migration_sets_current_schema_version(tmp_path):
 
         version = connection.execute("PRAGMA user_version").fetchone()[0]
 
-        assert version == SCHEMA_VERSION == 6
+        assert version == SCHEMA_VERSION == 8
 
 
 def test_all_migrations_are_safe_to_repeat(tmp_path):
@@ -244,4 +244,4 @@ def test_all_migrations_are_safe_to_repeat(tmp_path):
 
         version = connection.execute("PRAGMA user_version").fetchone()[0]
 
-        assert version == 6
+        assert version == 8
