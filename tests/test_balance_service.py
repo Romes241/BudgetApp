@@ -82,6 +82,37 @@ def test_editing_and_deleting_manual_activity_recalculates_balance(balance_datab
     assert balance_service.get_running_balance()["balance_pence"] == 10000
 
 
+def test_imported_payslip_changes_balance_only_after_receipt_is_confirmed(
+    balance_database,
+):
+    today = date.today().isoformat()
+    with balance_database() as connection:
+        cursor = connection.execute(
+            """INSERT INTO income_history (pay_date, gross_pay_pence, net_pay_pence)
+                VALUES (?, 6000, 5000)""",
+            (today,),
+        )
+        income_id = int(cursor.lastrowid)
+        connection.execute(
+            """INSERT INTO imported_payslips (source_hash, source_file, income_id)
+                VALUES ('pending-receipt', 'payslip.pdf', ?)""",
+            (income_id,),
+        )
+
+    assert balance_service.get_running_balance()["balance_pence"] == 10000
+    assert balance_service.get_actual_transactions() == []
+
+    transaction_id = balance_service.record_imported_payslip_receipt(income_id, today)
+
+    assert transaction_id is not None
+    assert balance_service.get_running_balance()["balance_pence"] == 15000
+    assert (
+        balance_service.record_imported_payslip_receipt(income_id, today)
+        == transaction_id
+    )
+    assert balance_service.get_running_balance()["balance_pence"] == 15000
+
+
 def test_editing_and_deleting_savings_activity_updates_goal_and_balance(
     balance_database,
 ):

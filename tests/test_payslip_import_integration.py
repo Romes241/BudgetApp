@@ -229,6 +229,46 @@ def test_import_uses_reviewed_values_and_preserves_payment_lines(
     assert result["reconciliation"]["status"] == "passed"
 
 
+def test_import_can_record_and_link_a_confirmed_bank_receipt(
+    database_path,
+    extracted_data,
+):
+    result = import_payslip(
+        "sample.pdf",
+        confirmed=True,
+        receipt_date="2026-10-15",
+        database_path=database_path,
+    )
+
+    with connect_database(database_path) as connection:
+        receipt = connection.execute(
+            """SELECT transaction_date, transaction_type, amount_pence,
+                linked_income_id FROM actual_transactions"""
+        ).fetchone()
+
+    assert receipt["transaction_date"] == "2026-10-15"
+    assert receipt["transaction_type"] == "regular_income"
+    assert receipt["amount_pence"] == 8000
+    assert receipt["linked_income_id"] == result["income_id"]
+    assert result["receipt_transaction_id"] is not None
+
+
+def test_import_rejects_future_receipt_without_writing_records(
+    database_path,
+    extracted_data,
+):
+    with pytest.raises(PayslipValidationError, match="cannot be in the future"):
+        import_payslip(
+            "sample.pdf",
+            confirmed=True,
+            receipt_date="2099-10-15",
+            database_path=database_path,
+        )
+
+    assert table_count(database_path, "income_history") == 0
+    assert table_count(database_path, "actual_transactions") == 0
+
+
 def test_import_rejects_reviewed_data_for_changed_source_hash(
     database_path,
     extracted_data,

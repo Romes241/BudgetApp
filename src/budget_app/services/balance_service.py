@@ -28,7 +28,9 @@ def get_running_balance() -> dict[str, Any]:
                         (i.pay_date = ? AND i.created_at > ?))
                     AND i.pay_date <= ?
                     AND NOT EXISTS (SELECT 1 FROM actual_transactions AS t
-                        WHERE t.linked_income_id = i.id)), 0) AS income_pence,
+                        WHERE t.linked_income_id = i.id)
+                    AND NOT EXISTS (SELECT 1 FROM imported_payslips AS p
+                        WHERE p.income_id = i.id)), 0) AS income_pence,
                 COALESCE((SELECT SUM(CASE transaction_type
                     WHEN 'deposit' THEN -amount_pence ELSE amount_pence END)
                     FROM savings_goal_transactions
@@ -136,6 +138,8 @@ def get_actual_transactions() -> list[dict[str, Any]]:
                     'income', NULL, NULL, 'income' FROM income_history AS i
                 WHERE NOT EXISTS (SELECT 1 FROM actual_transactions AS t
                     WHERE t.linked_income_id = i.id)
+                    AND NOT EXISTS (SELECT 1 FROM imported_payslips AS p
+                    WHERE p.income_id = i.id)
                 UNION ALL
                 SELECT t.id, t.transaction_date,
                     g.name || ' ' || t.transaction_type,
@@ -222,6 +226,57 @@ def link_confirmed_income_to_payslip(
             (income_id, transaction_id),
         )
         return cursor.rowcount > 0
+
+
+def record_imported_payslip_receipt(
+    income_id: int,
+    receipt_date: str | date,
+) -> int | None:
+    """Record the actual bank receipt for an imported payslip once confirmed."""
+    if isinstance(receipt_date, datetime):
+        raise ValueError("Receipt date must be a date, not a datetime.")
+    if isinstance(receipt_date, date):
+        receipt_date = receipt_date.isoformat()
+    if not isinstance(receipt_date, str):
+        raise TypeError("Receipt date must use YYYY-MM-DD format.")
+    try:
+        parsed_receipt_date = date.fromisoformat(receipt_date)
+    except ValueError:
+        raise ValueError("Receipt date must use YYYY-MM-DD format.") from None
+    if parsed_receipt_date.isoformat() != receipt_date:
+        raise ValueError("Receipt date must use YYYY-MM-DD format.")
+    if parsed_receipt_date > date.today():
+        raise ValueError("Receipt date cannot be in the future.")
+
+    with database_connection() as connection:
+        income = connection.execute(
+            """SELECT i.pay_date, i.net_pay_pence
+                FROM income_history AS i
+                JOIN imported_payslips AS p ON p.income_id = i.id
+                WHERE i.id = ?""",
+            (income_id,),
+        ).fetchone()
+        if income is None:
+            return None
+        pay_date = date.fromisoformat(income["pay_date"])
+        if abs((pay_date - parsed_receipt_date).days) > 7:
+            raise ValueError(
+                "Receipt date must be within seven days of the payslip date."
+            )
+        existing = connection.execute(
+            "SELECT id FROM actual_transactions WHERE linked_income_id = ?",
+            (income_id,),
+        ).fetchone()
+        if existing is not None:
+            return int(existing["id"])
+        cursor = connection.execute(
+            """INSERT INTO actual_transactions (
+                transaction_date, description, transaction_type,
+                amount_pence, linked_income_id
+            ) VALUES (?, 'Income', 'regular_income', ?, ?)""",
+            (receipt_date, int(income["net_pay_pence"]), income_id),
+        )
+        return int(cursor.lastrowid)
 
 
 def update_actual_transaction(

@@ -1,6 +1,7 @@
 """Income history management page."""
 
 import sqlite3
+from datetime import date
 from decimal import Decimal
 from typing import ClassVar
 
@@ -24,12 +25,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from budget_app.pages.receipt_dialog import ReceiptConfirmationDialog
+from budget_app.services.balance_service import record_imported_payslip_receipt
 from budget_app.services.income_service import (
     add_income,
     delete_income,
     get_income_history,
     update_income,
 )
+from budget_app.services.settings_service import get_settings
 from budget_app.utils.money import format_money, to_pence
 from budget_app.utils.table import configure_table_header
 
@@ -301,9 +305,17 @@ class IncomePage(QWidget):
         self.delete_button.clicked.connect(self.delete_record)
         self.delete_button.setEnabled(False)
 
+        self.confirm_receipt_button = QPushButton("Confirm received")
+        self.confirm_receipt_button.clicked.connect(self.confirm_received)
+        self.confirm_receipt_button.setEnabled(False)
+        self.confirm_receipt_button.setToolTip(
+            "Select an imported payslip that has reached your bank."
+        )
+
         action_layout.addWidget(self.add_button)
         action_layout.addWidget(self.edit_button)
         action_layout.addWidget(self.delete_button)
+        action_layout.addWidget(self.confirm_receipt_button)
         action_layout.addStretch()
 
         main_layout.addLayout(action_layout)
@@ -448,6 +460,16 @@ class IncomePage(QWidget):
         has_selection = record is not None
 
         self.delete_button.setEnabled(has_selection)
+        self.confirm_receipt_button.setEnabled(
+            bool(
+                record and record.get("is_imported") and not record.get("receipt_date")
+            )
+        )
+        self.confirm_receipt_button.setToolTip(
+            "Confirm the bank receipt for this imported payslip."
+            if record and record.get("is_imported") and not record.get("receipt_date")
+            else "Select an imported payslip that has not yet been confirmed as received."
+        )
 
         if not has_selection:
             self.edit_button.setEnabled(False)
@@ -462,6 +484,53 @@ class IncomePage(QWidget):
         else:
             self.edit_button.setEnabled(True)
             self.edit_button.setToolTip("Edit the selected income record.")
+
+    def confirm_received(self) -> None:
+        """Record and link a previously imported payslip after it arrives."""
+        record = self._selected_record()
+        if not record or not record.get("is_imported") or record.get("receipt_date"):
+            return
+
+        settings = get_settings()
+        dialog = ReceiptConfirmationDialog(
+            date.fromisoformat(record["pay_date"]),
+            int(settings["early_payment_offset_days"]),
+            self,
+            confirm_received=True,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.receipt_date is None:
+            return
+
+        try:
+            transaction_id = record_imported_payslip_receipt(
+                record["id"], dialog.receipt_date
+            )
+            if transaction_id is None:
+                QMessageBox.warning(
+                    self,
+                    "Payslip not found",
+                    "This imported payslip no longer exists. Refresh the list.",
+                )
+                self.refresh_income()
+                return
+            if self.refresh_income():
+                self.status_label.setText(
+                    f"Pay receipt recorded and linked (transaction #{transaction_id})."
+                )
+                self.income_changed.emit()
+        except (
+            ValueError,
+            TypeError,
+            KeyError,
+            RuntimeError,
+            OSError,
+            sqlite3.Error,
+        ) as exc:
+            QMessageBox.warning(
+                self,
+                "Could not confirm receipt",
+                f"The pay receipt could not be recorded:\n\n{exc}",
+            )
 
     def add_record(self) -> None:
         dialog = IncomeDialog(parent=self)

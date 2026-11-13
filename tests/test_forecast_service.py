@@ -730,6 +730,79 @@ def test_settings_forecast_excludes_dates_with_actual_income(
     assert result["forecast_diagnostics"]["recorded_pay_dates_excluded"] == 1
 
 
+def test_pending_imported_payslip_supplies_expected_early_receipt(
+    forecast_database,
+):
+    configure_settings(
+        forecast_database,
+        next_pay_date="2026-11-13",
+        early_payment_offset_days=1,
+    )
+    income_id = add_income(
+        forecast_database,
+        "2026-11-13",
+        net_pay_pence=45943,
+    )
+    with connect_database(forecast_database) as connection:
+        connection.execute(
+            """INSERT INTO imported_payslips (source_hash, source_file, income_id)
+                VALUES ('pending-payday', 'payslip.pdf', ?)""",
+            (income_id,),
+        )
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 12),
+        end_date=date(2026, 11, 12),
+    )
+
+    regular_income = [
+        entry for entry in result["entries"] if entry["type"] == "regular_income"
+    ]
+    assert regular_income == [
+        {
+            "type": "regular_income",
+            "date": date(2026, 11, 12),
+            "amount_pence": 45943,
+            "description": "Expected take-home pay from imported payslip",
+        }
+    ]
+
+
+def test_linked_imported_payslip_is_not_forecast_again(forecast_database):
+    configure_settings(
+        forecast_database,
+        next_pay_date="2026-11-13",
+        early_payment_offset_days=1,
+    )
+    income_id = add_income(
+        forecast_database,
+        "2026-11-13",
+        net_pay_pence=45943,
+    )
+    with connect_database(forecast_database) as connection:
+        connection.execute(
+            """INSERT INTO imported_payslips (source_hash, source_file, income_id)
+                VALUES ('received-payday', 'payslip.pdf', ?)""",
+            (income_id,),
+        )
+        connection.execute(
+            """INSERT INTO actual_transactions (
+                transaction_date, description, transaction_type,
+                amount_pence, linked_income_id
+            ) VALUES ('2026-11-12', 'Income', 'regular_income', 45943, ?)""",
+            (income_id,),
+        )
+
+    result = forecast_income_from_settings(
+        start_date=date(2026, 11, 12),
+        end_date=date(2026, 11, 12),
+    )
+
+    assert [
+        entry for entry in result["entries"] if entry["type"] == "regular_income"
+    ] == []
+
+
 def test_settings_forecast_only_excludes_exact_actual_pay_dates(
     forecast_database,
 ):
