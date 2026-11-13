@@ -44,6 +44,7 @@ from budget_app.services.debt_service import record_debt_payment
 from budget_app.services.savings_goal_service import record_savings_transaction
 from budget_app.utils.money import format_money
 from budget_app.utils.table import configure_table_header
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 class SummaryCard(QFrame):
@@ -118,6 +119,7 @@ class CashflowPage(QWidget):
         self.projection: dict | None = None
 
         self._build_ui()
+        configure_form_controls(self)
         self.refresh_projection()
 
     def _build_ui(self) -> None:
@@ -535,6 +537,7 @@ class CashflowPage(QWidget):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
+        configure_form_controls(dialog)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         actual_amount = amount.value()
@@ -715,6 +718,7 @@ class CashflowPage(QWidget):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
+        configure_form_controls(dialog)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
         return {

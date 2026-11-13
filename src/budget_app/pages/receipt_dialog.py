@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 class ReceiptConfirmationDialog(QDialog):
@@ -103,6 +104,7 @@ class ReceiptConfirmationDialog(QDialog):
         buttons.accepted.connect(self._accept_receipt_choice)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        configure_form_controls(self)
 
     def _accept_receipt_choice(self) -> None:
         if self.received_checkbox.isChecked() or not self.received_checkbox.isVisible():

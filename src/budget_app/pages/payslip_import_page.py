@@ -39,6 +39,7 @@ from budget_app.services.payslip_import_service import (
 )
 from budget_app.services.settings_service import get_settings
 from budget_app.utils.table import configure_table_header
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 class PayslipReviewDialog(QDialog):
@@ -69,6 +70,7 @@ class PayslipReviewDialog(QDialog):
         self.resize(900, 760)
 
         self._build_ui()
+        configure_form_controls(self)
         self._populate_fields()
 
     def _build_ui(self) -> None:
