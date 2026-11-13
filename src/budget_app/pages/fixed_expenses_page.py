@@ -4,7 +4,7 @@ import sqlite3
 from decimal import Decimal
 from typing import ClassVar
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -145,6 +145,8 @@ class FixedExpenseDialog(QDialog):
 
 class FixedExpensesPage(QWidget):
     """Display and manage recurring fixed expenses."""
+
+    expenses_changed = Signal()
 
     HEADERS: ClassVar[list[str]] = [
         "Name",
@@ -467,6 +469,7 @@ class FixedExpensesPage(QWidget):
             add_fixed_expense(**dialog.get_values())
             self.refresh_expenses()
             self.status_label.setText("Fixed expense added successfully.")
+            self.expenses_changed.emit()
 
         except (
             ValueError,
@@ -512,6 +515,7 @@ class FixedExpensesPage(QWidget):
 
             self.refresh_expenses()
             self.status_label.setText("Fixed expense updated successfully.")
+            self.expenses_changed.emit()
 
         except (
             ValueError,
@@ -583,6 +587,7 @@ class FixedExpensesPage(QWidget):
 
             self.refresh_expenses()
             self.status_label.setText(f"Fixed expense {action_past} successfully.")
+            self.expenses_changed.emit()
 
         except (
             ValueError,

@@ -21,6 +21,7 @@ from budget_app import __version__
 from budget_app.database import connect_database, initialise_database
 from budget_app.pages.analytics_page import AnalyticsPage
 from budget_app.pages.cashflow_page import CashflowPage
+from budget_app.pages.dashboard_page import DashboardPage
 from budget_app.pages.debt_page import DebtPage
 from budget_app.pages.fixed_expenses_page import FixedExpensesPage
 from budget_app.pages.income_page import IncomePage
@@ -85,16 +86,22 @@ class MainWindow(QMainWindow):
 
         self.page_stack = QStackedWidget()
 
-        dashboard_page = self._create_dashboard_page()
+        self.dashboard_page = DashboardPage()
+        dashboard_page = self.dashboard_page
         self.analytics_page = AnalyticsPage()
-        cashflow_page = CashflowPage()
+        self.cashflow_page = CashflowPage()
+        cashflow_page = self.cashflow_page
         debt_page = DebtPage()
         debt_page.debts_changed.connect(cashflow_page.refresh_projection)
         savings_goals_page = SavingsGoalsPage()
         savings_goals_page.goals_changed.connect(cashflow_page.refresh_projection)
 
         fixed_expenses_page = FixedExpensesPage()
+        fixed_expenses_page.expenses_changed.connect(cashflow_page.refresh_projection)
         variable_expenses_page = VariableExpensesPage()
+        variable_expenses_page.expenses_changed.connect(
+            cashflow_page.refresh_projection
+        )
         income_page = IncomePage()
         income_page.income_changed.connect(cashflow_page.refresh_projection)
         payslip_import_page = PayslipImportPage(income_page=income_page)
@@ -119,6 +126,7 @@ class MainWindow(QMainWindow):
             "Dashboard",
             dashboard_page,
         )
+        dashboard_page.navigate_requested.connect(self._select_page)
         self._add_navigation_button(
             sidebar_layout,
             "Analytics",
@@ -183,30 +191,6 @@ class MainWindow(QMainWindow):
 
         self._select_page("Dashboard")
 
-    def _create_dashboard_page(self) -> QWidget:
-        """Create the initial dashboard placeholder."""
-
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(12)
-
-        heading = QLabel("Dashboard")
-        heading.setObjectName("pageHeading")
-
-        description = QLabel(
-            "Your personal finance dashboard. "
-            "Select Cashflow to view your projected financial position."
-        )
-        description.setObjectName("secondaryText")
-        description.setWordWrap(True)
-
-        layout.addWidget(heading)
-        layout.addWidget(description)
-        layout.addStretch()
-
-        return page
-
     def _add_navigation_button(
         self,
         layout: QVBoxLayout,
@@ -239,7 +223,9 @@ class MainWindow(QMainWindow):
 
         page_index = list(self.navigation_buttons).index(name)
         self.page_stack.setCurrentIndex(page_index)
-        if name == "Analytics":
+        if name == "Dashboard":
+            self.dashboard_page.refresh_dashboard(self.cashflow_page.projection)
+        elif name == "Analytics":
             self.analytics_page.refresh_analytics()
         elif name == "What-if Simulator":
             self.simulator_page.refresh_projection()
