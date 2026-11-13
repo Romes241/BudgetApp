@@ -35,6 +35,7 @@ from budget_app.services.savings_goal_service import (
     update_savings_goal,
 )
 from budget_app.utils.money import format_money
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 class SavingsGoalDialog(QDialog):
@@ -72,6 +73,7 @@ class SavingsGoalDialog(QDialog):
             self.name_input.setText(goal["name"])
             self.target_input.setValue(float(goal["target_amount"]))
             self.monthly_input.setValue(float(goal["monthly_contribution"]))
+        configure_form_controls(self)
 
     @staticmethod
     def _money_input() -> QDoubleSpinBox:
@@ -149,6 +151,7 @@ class SavingsTransactionDialog(QDialog):
         layout.addWidget(buttons)
         self.type_input.currentIndexChanged.connect(self._update_amount_limit)
         self._update_amount_limit()
+        configure_form_controls(self)
 
     def _update_amount_limit(self) -> None:
         is_withdrawal = self.type_input.currentData() == "withdrawal"

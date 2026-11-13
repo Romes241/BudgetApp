@@ -28,6 +28,7 @@ from budget_app.services.settings_service import (
     get_settings,
     save_settings,
 )
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 class SettingsPage(QWidget):
@@ -40,6 +41,7 @@ class SettingsPage(QWidget):
 
         self.pension_estimate: dict | None = None
         self._build_ui()
+        configure_form_controls(self)
         self.refresh_settings()
 
     @staticmethod
@@ -170,7 +172,6 @@ class SettingsPage(QWidget):
         self.balance_as_of_date_input = QDateEdit()
         self.balance_as_of_date_input.setCalendarPopup(True)
         self.balance_as_of_date_input.setDisplayFormat("dd MMM yyyy")
-        self.balance_as_of_date_input.setMinimumWidth(155)
 
         self.projection_months_input = QSpinBox()
         self.projection_months_input.setRange(1, 120)

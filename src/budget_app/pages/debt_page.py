@@ -38,6 +38,7 @@ from budget_app.services.debt_service import (
 )
 from budget_app.utils.money import format_money
 from budget_app.utils.table import configure_table_header
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 class DebtDialog(QDialog):
@@ -55,6 +56,7 @@ class DebtDialog(QDialog):
         self.setMinimumWidth(400)
 
         self._build_ui()
+        configure_form_controls(self)
 
         if debt is not None:
             self._populate_fields()
@@ -216,6 +218,7 @@ class DebtPaymentDialog(QDialog):
         button_box.rejected.connect(self.reject)
 
         layout.addWidget(button_box)
+        configure_form_controls(self)
 
     def _validate_and_accept(self) -> None:
         if self.amount_input.value() <= 0:
@@ -284,6 +287,7 @@ class DebtPage(QWidget):
         self.debts: list[dict] = []
 
         self._build_ui()
+        configure_form_controls(self)
         self.refresh_debts()
 
     @staticmethod

@@ -31,6 +31,7 @@ from budget_app.services.variable_expense_service import (
 )
 from budget_app.utils.money import format_money, to_pence
 from budget_app.utils.table import configure_table_header
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 class VariableExpenseDialog(QDialog):
@@ -51,6 +52,7 @@ class VariableExpenseDialog(QDialog):
         self.setMinimumWidth(380)
 
         self._build_ui()
+        configure_form_controls(self)
 
         if expense is not None:
             self._populate_fields()

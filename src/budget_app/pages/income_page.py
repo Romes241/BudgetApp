@@ -36,6 +36,7 @@ from budget_app.services.income_service import (
 from budget_app.services.settings_service import get_settings
 from budget_app.utils.money import format_money, to_pence
 from budget_app.utils.table import configure_table_header
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 class IncomeDialog(QDialog):
@@ -63,6 +64,7 @@ class IncomeDialog(QDialog):
         self.setMinimumWidth(440)
 
         self._build_ui()
+        configure_form_controls(self)
 
         if income is not None:
             self._populate_fields()

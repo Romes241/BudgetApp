@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from budget_app.services.analytics_service import get_financial_analytics
 from budget_app.utils.money import format_money
 from budget_app.utils.table import configure_table_header
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 def _compact_money(amount_pence: int) -> str:
@@ -331,6 +332,7 @@ class AnalyticsPage(QWidget):
         super().__init__(parent)
         self.analytics: dict[str, Any] | None = None
         self._build_ui()
+        configure_form_controls(self)
         self.refresh_analytics()
 
     def _build_ui(self) -> None:

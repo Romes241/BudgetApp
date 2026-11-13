@@ -30,6 +30,7 @@ from budget_app.services.scenario_service import calculate_scenario
 from budget_app.services.settings_service import get_settings
 from budget_app.utils.money import format_money
 from budget_app.utils.table import configure_table_header
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 class _BalanceCard(QFrame):
@@ -93,6 +94,7 @@ class SimulatorPage(QWidget):
         self._loading_pay_inputs = False
         self._pay_assumptions_modified = False
         self._build_ui()
+        configure_form_controls(self)
         self.refresh_projection()
 
     def _build_ui(self) -> None:

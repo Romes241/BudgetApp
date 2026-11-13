@@ -30,6 +30,7 @@ from budget_app.pages.savings_goals_page import SavingsGoalsPage
 from budget_app.pages.settings_page import SettingsPage
 from budget_app.pages.simulator_page import SimulatorPage
 from budget_app.pages.variable_expenses_page import VariableExpensesPage
+from budget_app.utils.widget_sizing import configure_form_controls
 
 
 def load_stylesheet() -> str:
@@ -120,6 +121,9 @@ class MainWindow(QMainWindow):
         self.page_stack.addWidget(income_page)
         self.page_stack.addWidget(payslip_import_page)
         self.page_stack.addWidget(settings_page)
+
+        for page_index in range(self.page_stack.count()):
+            configure_form_controls(self.page_stack.widget(page_index))
 
         self._add_navigation_button(
             sidebar_layout,
