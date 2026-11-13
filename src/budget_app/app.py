@@ -21,6 +21,7 @@ from budget_app import __version__
 from budget_app.database import connect_database, initialise_database
 from budget_app.pages.analytics_page import AnalyticsPage
 from budget_app.pages.cashflow_page import CashflowPage
+from budget_app.pages.dashboard_page import DashboardPage
 from budget_app.pages.debt_page import DebtPage
 from budget_app.pages.fixed_expenses_page import FixedExpensesPage
 from budget_app.pages.income_page import IncomePage
@@ -85,7 +86,8 @@ class MainWindow(QMainWindow):
 
         self.page_stack = QStackedWidget()
 
-        dashboard_page = self._create_dashboard_page()
+        self.dashboard_page = DashboardPage()
+        dashboard_page = self.dashboard_page
         self.analytics_page = AnalyticsPage()
         cashflow_page = CashflowPage()
         debt_page = DebtPage()
@@ -119,6 +121,7 @@ class MainWindow(QMainWindow):
             "Dashboard",
             dashboard_page,
         )
+        dashboard_page.navigate_requested.connect(self._select_page)
         self._add_navigation_button(
             sidebar_layout,
             "Analytics",
@@ -183,30 +186,6 @@ class MainWindow(QMainWindow):
 
         self._select_page("Dashboard")
 
-    def _create_dashboard_page(self) -> QWidget:
-        """Create the initial dashboard placeholder."""
-
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(12)
-
-        heading = QLabel("Dashboard")
-        heading.setObjectName("pageHeading")
-
-        description = QLabel(
-            "Your personal finance dashboard. "
-            "Select Cashflow to view your projected financial position."
-        )
-        description.setObjectName("secondaryText")
-        description.setWordWrap(True)
-
-        layout.addWidget(heading)
-        layout.addWidget(description)
-        layout.addStretch()
-
-        return page
-
     def _add_navigation_button(
         self,
         layout: QVBoxLayout,
@@ -239,7 +218,9 @@ class MainWindow(QMainWindow):
 
         page_index = list(self.navigation_buttons).index(name)
         self.page_stack.setCurrentIndex(page_index)
-        if name == "Analytics":
+        if name == "Dashboard":
+            self.page_stack.widget(page_index).refresh_dashboard()
+        elif name == "Analytics":
             self.analytics_page.refresh_analytics()
         elif name == "What-if Simulator":
             self.simulator_page.refresh_projection()
