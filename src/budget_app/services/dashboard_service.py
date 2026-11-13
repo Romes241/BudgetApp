@@ -1,17 +1,16 @@
 """Read the financial summaries needed by the Dashboard."""
 
-from datetime import date
 from typing import Any
 
 from budget_app.services.balance_service import get_running_balance
-from budget_app.services.cashflow_service import generate_cashflow_projection
 from budget_app.services.debt_service import get_debts
 from budget_app.services.savings_goal_service import get_savings_goals
 
 
-def get_dashboard_data(as_of_date: date | None = None) -> dict[str, Any]:
-    """Combine existing cashflow, debt and savings data for the overview."""
-    projection = generate_cashflow_projection(start_date=as_of_date)
+def get_dashboard_data(projection: dict[str, Any] | None) -> dict[str, Any]:
+    """Combine a current cashflow projection with debt and savings summaries."""
+    if projection is None:
+        raise ValueError("Cashflow projection is unavailable.")
     goals = get_savings_goals()
     debts = get_debts()
     regular_pay = next(

@@ -208,10 +208,10 @@ class DashboardPage(QWidget):
         self.scroll.setWidget(content)
         outer.addWidget(self.scroll)
 
-    def refresh_dashboard(self) -> None:
+    def refresh_dashboard(self, projection: dict | None) -> None:
         """Refresh all dashboard values from the existing application services."""
         try:
-            data = get_dashboard_data()
+            data = get_dashboard_data(projection)
             projection = data["projection"]
             balance = data["balance"]
             self.cards["balance"].setText(

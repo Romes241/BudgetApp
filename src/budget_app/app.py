@@ -89,14 +89,19 @@ class MainWindow(QMainWindow):
         self.dashboard_page = DashboardPage()
         dashboard_page = self.dashboard_page
         self.analytics_page = AnalyticsPage()
-        cashflow_page = CashflowPage()
+        self.cashflow_page = CashflowPage()
+        cashflow_page = self.cashflow_page
         debt_page = DebtPage()
         debt_page.debts_changed.connect(cashflow_page.refresh_projection)
         savings_goals_page = SavingsGoalsPage()
         savings_goals_page.goals_changed.connect(cashflow_page.refresh_projection)
 
         fixed_expenses_page = FixedExpensesPage()
+        fixed_expenses_page.expenses_changed.connect(cashflow_page.refresh_projection)
         variable_expenses_page = VariableExpensesPage()
+        variable_expenses_page.expenses_changed.connect(
+            cashflow_page.refresh_projection
+        )
         income_page = IncomePage()
         income_page.income_changed.connect(cashflow_page.refresh_projection)
         payslip_import_page = PayslipImportPage(income_page=income_page)
@@ -219,7 +224,7 @@ class MainWindow(QMainWindow):
         page_index = list(self.navigation_buttons).index(name)
         self.page_stack.setCurrentIndex(page_index)
         if name == "Dashboard":
-            self.page_stack.widget(page_index).refresh_dashboard()
+            self.dashboard_page.refresh_dashboard(self.cashflow_page.projection)
         elif name == "Analytics":
             self.analytics_page.refresh_analytics()
         elif name == "What-if Simulator":

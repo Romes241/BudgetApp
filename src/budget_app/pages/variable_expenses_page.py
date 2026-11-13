@@ -4,7 +4,7 @@ import sqlite3
 from decimal import Decimal
 from typing import ClassVar
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -122,6 +122,8 @@ class VariableExpenseDialog(QDialog):
 
 class VariableExpensesPage(QWidget):
     """Display and manage monthly variable expense budgets."""
+
+    expenses_changed = Signal()
 
     HEADERS: ClassVar[list[str]] = [
         "Name",
@@ -428,6 +430,7 @@ class VariableExpensesPage(QWidget):
             add_variable_expense(**dialog.get_values())
             self.refresh_expenses()
             self.status_label.setText("Variable expense added successfully.")
+            self.expenses_changed.emit()
 
         except (
             ValueError,
@@ -476,6 +479,7 @@ class VariableExpensesPage(QWidget):
 
             self.refresh_expenses()
             self.status_label.setText("Variable expense updated successfully.")
+            self.expenses_changed.emit()
 
         except (
             ValueError,
@@ -547,6 +551,7 @@ class VariableExpensesPage(QWidget):
 
             self.refresh_expenses()
             self.status_label.setText(f"Variable expense {action_past} successfully.")
+            self.expenses_changed.emit()
 
         except (
             ValueError,
