@@ -306,6 +306,47 @@ def test_projection_maps_forecast_income_entries_and_running_balance(
     assert projection["closing_balance_pence"] == 40000
 
 
+def test_pending_imported_income_is_not_filtered_from_cashflow_projection(
+    cashflow_database,
+    monkeypatch,
+):
+    pay_date = date(2026, 11, 13)
+    with connect_database(cashflow_database) as connection:
+        cursor = connection.execute(
+            """INSERT INTO income_history (pay_date, gross_pay_pence, net_pay_pence)
+                VALUES (?, 50000, 40000)""",
+            (pay_date.isoformat(),),
+        )
+        connection.execute(
+            """INSERT INTO imported_payslips (source_hash, source_file, income_id)
+                VALUES ('pending-cashflow', 'payslip.pdf', ?)""",
+            (cursor.lastrowid,),
+        )
+    monkeypatch.setattr(
+        cashflow_service,
+        "forecast_income_from_settings",
+        lambda **kwargs: {
+            "entries": [
+                {
+                    "date": pay_date,
+                    "type": "regular_income",
+                    "description": "Expected take-home pay from imported payslip",
+                    "amount_pence": 40000,
+                }
+            ],
+            "total_income_pence": 40000,
+        },
+    )
+
+    projection = cashflow_service.generate_cashflow_projection(pay_date)
+
+    assert len(projection["entries"]) == 1
+    assert projection["entries"][0]["description"] == (
+        "Expected take-home pay from imported payslip"
+    )
+    assert projection["entries"][0]["running_balance_pence"] == 40000
+
+
 def test_deactivated_variable_expense_is_excluded_and_reactivated_expense_is_projected(
     cashflow_database,
 ):

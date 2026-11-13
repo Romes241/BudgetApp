@@ -104,9 +104,13 @@ def get_income_history() -> list[dict]:
     with database_connection() as connection:
         rows = connection.execute(
             """
-            SELECT *
-            FROM income_history
-            ORDER BY pay_date DESC, id DESC
+            SELECT i.*,
+                CASE WHEN p.income_id IS NULL THEN 0 ELSE 1 END AS is_imported,
+                t.transaction_date AS receipt_date
+            FROM income_history AS i
+            LEFT JOIN imported_payslips AS p ON p.income_id = i.id
+            LEFT JOIN actual_transactions AS t ON t.linked_income_id = i.id
+            ORDER BY i.pay_date DESC, i.id DESC
             """
         ).fetchall()
 

@@ -167,7 +167,10 @@ def generate_cashflow_projection(
         recorded_income_dates = {
             row["pay_date"]
             for row in connection.execute(
-                "SELECT DISTINCT pay_date FROM income_history"
+                """SELECT DISTINCT i.pay_date FROM income_history AS i
+                    LEFT JOIN imported_payslips AS p ON p.income_id = i.id
+                    LEFT JOIN actual_transactions AS t ON t.linked_income_id = i.id
+                    WHERE p.income_id IS NULL OR t.id IS NOT NULL"""
             )
         }
         savings_goals = connection.execute(

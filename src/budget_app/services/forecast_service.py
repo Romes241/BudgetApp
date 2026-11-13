@@ -284,10 +284,10 @@ def forecast_income_from_settings(
     payslips are retained as a comparison so users can see the difference
     between the settings-based estimate and observed pay.
 
-    Actual income records on contractual pay dates replace the corresponding
-    projected regular-income entries. Projected entries are shifted by the
-    configured early-payment offset, but historical payslip dates are never
-    changed.
+    Confirmed actual income on contractual pay dates removes the corresponding
+    projected entry. An imported but unreceived payslip supplies its actual net
+    amount while it remains projected. Projected dates are shifted by the
+    configured early-payment offset, but contractual payslip dates are unchanged.
 
     If next_pay_date is not configured, regular pay dates cannot be generated.
     Confirmed expected bonuses are still returned independently.
@@ -346,6 +346,7 @@ def forecast_income_from_settings(
         )
 
         next_pay_date_value = settings["next_pay_date"]
+        scheduled_payments = []
 
         if next_pay_date_value:
             try:
@@ -379,10 +380,13 @@ def forecast_income_from_settings(
             # the projected cashflow entries to expected receipt dates.
             recorded_rows = connection.execute(
                 """
-                SELECT DISTINCT pay_date
-                FROM income_history
-                WHERE pay_date >= ?
-                  AND pay_date <= ?
+                SELECT i.pay_date, i.net_pay_pence,
+                    CASE WHEN p.income_id IS NOT NULL
+                        AND t.id IS NULL THEN 1 ELSE 0 END AS pending_import
+                FROM income_history AS i
+                LEFT JOIN imported_payslips AS p ON p.income_id = i.id
+                LEFT JOIN actual_transactions AS t ON t.linked_income_id = i.id
+                WHERE i.pay_date >= ? AND i.pay_date <= ?
                 """,
                 (
                     contractual_start_date.isoformat(),
@@ -390,24 +394,43 @@ def forecast_income_from_settings(
                 ),
             ).fetchall()
 
-            recorded_pay_dates = {
-                date.fromisoformat(row["pay_date"]) for row in recorded_rows
-            }
+            received_pay_dates: set[date] = set()
+            pending_imports: dict[date, int] = {}
+            for row in recorded_rows:
+                contractual_date = date.fromisoformat(row["pay_date"])
+                if row["pending_import"]:
+                    pending_imports[contractual_date] = pending_imports.get(
+                        contractual_date, 0
+                    ) + int(row["net_pay_pence"])
+                else:
+                    received_pay_dates.add(contractual_date)
 
-            original_pay_date_count = len(contractual_pay_dates)
+            for contractual_date in contractual_pay_dates:
+                if contractual_date in received_pay_dates:
+                    continue
+                imported_amount = pending_imports.get(contractual_date)
+                scheduled_payments.append(
+                    {
+                        "date": contractual_date - payment_offset,
+                        "amount_pence": (
+                            imported_amount
+                            if imported_amount is not None
+                            else regular_net_pence
+                        ),
+                        "description": (
+                            "Expected take-home pay from imported payslip"
+                            if imported_amount is not None
+                            else "Estimated regular take-home pay"
+                        ),
+                    }
+                )
 
-            pay_dates = [
-                contractual_pay_date - payment_offset
-                for contractual_pay_date in contractual_pay_dates
-                if contractual_pay_date not in recorded_pay_dates
-            ]
-
-            diagnostics["recorded_pay_dates_excluded"] = original_pay_date_count - len(
-                pay_dates
-            )
+            diagnostics["recorded_pay_dates_excluded"] = len(
+                contractual_pay_dates
+            ) - len(scheduled_payments)
 
         else:
-            pay_dates = []
+            diagnostics["recorded_pay_dates_excluded"] = 0
 
         bonuses = _get_expected_bonuses(
             connection,
@@ -418,11 +441,11 @@ def forecast_income_from_settings(
     entries = [
         {
             "type": "regular_income",
-            "date": pay_date,
-            "amount_pence": regular_net_pence,
-            "description": "Estimated regular take-home pay",
+            "date": payment["date"],
+            "amount_pence": payment["amount_pence"],
+            "description": payment["description"],
         }
-        for pay_date in pay_dates
+        for payment in scheduled_payments
     ]
 
     entries.extend(bonuses)

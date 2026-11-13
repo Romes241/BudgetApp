@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from budget_app.pages.receipt_dialog import ReceiptConfirmationDialog
 from budget_app.payslip_extractor import EarningsLine, PayslipData
 from budget_app.services.payslip_import_service import (
     DuplicatePayslipError,
@@ -36,6 +37,7 @@ from budget_app.services.payslip_import_service import (
     preview_payslip_import,
     validate_payslip,
 )
+from budget_app.services.settings_service import get_settings
 from budget_app.utils.table import configure_table_header
 
 
@@ -444,11 +446,22 @@ class PayslipImportPage(QWidget):
             self.status_label.setText("Payslip review cancelled. Nothing was imported.")
             return
 
+        settings = get_settings()
+        receipt_dialog = ReceiptConfirmationDialog(
+            date.fromisoformat(dialog.reviewed_data.pay_date),
+            int(settings["early_payment_offset_days"]),
+            self,
+        )
+        if receipt_dialog.exec() != QDialog.DialogCode.Accepted:
+            self.status_label.setText("Payslip import cancelled. Nothing was imported.")
+            return
+
         try:
             result = import_payslip(
                 self.selected_path,
                 confirmed=True,
                 reviewed_data=dialog.reviewed_data,
+                receipt_date=receipt_dialog.receipt_date,
             )
 
         except DuplicatePayslipError as exc:
@@ -477,6 +490,11 @@ class PayslipImportPage(QWidget):
         income_id = result["income_id"]
         reconciliation = result["reconciliation"]
         reconciliation_status = reconciliation.get("status", "unknown")
+        receipt_message = (
+            f"\nBank receipt recorded: {receipt_dialog.receipt_date:%d/%m/%Y}."
+            if receipt_dialog.receipt_date is not None
+            else "\nPay remains forecast until you confirm it has reached your bank."
+        )
 
         if self.income_page is not None:
             self.income_page.refresh_income()
@@ -491,6 +509,7 @@ class PayslipImportPage(QWidget):
                 f"Payslip imported successfully.\n\n"
                 f"Income record: #{income_id}\n"
                 f"Reconciliation: {reconciliation_status.title()}"
+                f"{receipt_message}"
             ),
         )
 

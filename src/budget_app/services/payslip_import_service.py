@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -308,8 +309,9 @@ def import_payslip(
     *,
     confirmed: bool = False,
     reviewed_data: PayslipData | None = None,
+    receipt_date: str | date | None = None,
     database_path: str | Path | None = None,
-) -> dict[str, int | dict]:
+) -> dict[str, int | dict | None]:
     """Import a validated payslip and return its ID with reconciliation.
 
     If reviewed_data is provided, the user's corrected values are imported
@@ -361,6 +363,34 @@ def import_payslip(
     assert data.pension_paid is not None
     assert data.other_deductions is not None
     assert data.net_pay is not None
+
+    receipt_date_value: str | None = None
+    if receipt_date is not None:
+        if isinstance(receipt_date, datetime):
+            raise PayslipValidationError("Receipt date must be a date, not a datetime.")
+        if isinstance(receipt_date, date):
+            receipt_date_value = receipt_date.isoformat()
+        elif isinstance(receipt_date, str):
+            try:
+                parsed_receipt_date = date.fromisoformat(receipt_date)
+            except ValueError:
+                raise PayslipValidationError(
+                    "Receipt date must use YYYY-MM-DD format."
+                ) from None
+            if parsed_receipt_date.isoformat() != receipt_date:
+                raise PayslipValidationError("Receipt date must use YYYY-MM-DD format.")
+            receipt_date_value = receipt_date
+        else:
+            raise PayslipValidationError("Receipt date must be a valid date.")
+
+        parsed_receipt_date = date.fromisoformat(receipt_date_value)
+        parsed_pay_date = date.fromisoformat(data.pay_date)
+        if parsed_receipt_date > date.today():
+            raise PayslipValidationError("Receipt date cannot be in the future.")
+        if abs((parsed_pay_date - parsed_receipt_date).days) > 7:
+            raise PayslipValidationError(
+                "Receipt date must be within seven days of the payslip date."
+            )
 
     hours_worked = _basic_hours(data.earnings)
     bonus_amount = _bonus_amount(data.earnings)
@@ -415,6 +445,17 @@ def import_payslip(
 
             income_id = cursor.lastrowid
 
+            receipt_transaction_id = None
+            if receipt_date_value is not None:
+                receipt_cursor = connection.execute(
+                    """INSERT INTO actual_transactions (
+                        transaction_date, description, transaction_type,
+                        amount_pence, linked_income_id
+                    ) VALUES (?, 'Income', 'regular_income', ?, ?)""",
+                    (receipt_date_value, to_pence(data.net_pay), income_id),
+                )
+                receipt_transaction_id = int(receipt_cursor.lastrowid)
+
             for line in data.earnings:
                 units = float(line.units) if line.units is not None else None
 
@@ -465,6 +506,7 @@ def import_payslip(
 
             return {
                 "income_id": income_id,
+                "receipt_transaction_id": receipt_transaction_id,
                 "reconciliation": reconciliation,
             }
 
