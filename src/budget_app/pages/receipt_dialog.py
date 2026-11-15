@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from budget_app.utils.widget_sizing import configure_form_controls
 
 

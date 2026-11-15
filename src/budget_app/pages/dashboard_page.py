@@ -90,6 +90,7 @@ class DashboardPage(QWidget):
     """Show balances, near-term cashflow and concise savings/debt summaries."""
 
     navigate_requested = Signal(str)
+    refresh_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -116,10 +117,10 @@ class DashboardPage(QWidget):
         title_block.addWidget(subtitle)
         title_row.addLayout(title_block)
         title_row.addStretch()
-        refresh = QPushButton("Refresh")
-        refresh.setObjectName("primaryButton")
-        refresh.clicked.connect(self.refresh_dashboard)
-        title_row.addWidget(refresh)
+        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.setObjectName("primaryButton")
+        self.refresh_button.clicked.connect(lambda: self.refresh_requested.emit())
+        title_row.addWidget(self.refresh_button)
         layout.addLayout(title_row)
 
         self.cards: dict[str, QLabel] = {}
@@ -214,26 +215,8 @@ class DashboardPage(QWidget):
             data = get_dashboard_data(projection)
             projection = data["projection"]
             balance = data["balance"]
-            self.cards["balance"].setText(
-                f"{format_money(balance['balance_pence'])}\n"
-                f"Reconciled {balance['baseline_date']:%d/%m/%Y}"
-            )
-            self.cards["closing"].setText(
-                f"{format_money(projection['closing_balance_pence'])}\n"
-                f"By {projection['end_date']:%d/%m/%Y}"
-            )
             pay = data["next_pay"]
-            self.cards["payday"].setText(
-                pay["date"].strftime("%d %b %Y") if pay else "Not configured"
-            )
-            self.cards["pay"].setText(
-                format_money(pay["amount_pence"]) if pay else "Not available"
-            )
             goals = data["savings_goals"]
-            self.cards["savings"].setText(
-                f"{format_money(data['savings_total_pence'])}\n{len(goals)} active goal(s)"
-            )
-            self.cards["debt"].setText(format_money(data["debt_total_pence"]))
 
             points = [(projection["start_date"], projection["opening_balance_pence"])]
             points.extend(
@@ -244,29 +227,61 @@ class DashboardPage(QWidget):
                 points.append(
                     (projection["end_date"], projection["closing_balance_pence"])
                 )
-            self.chart.set_points(points)
 
-            entries = projection["entries"][:8]
-            self.transaction_table.setRowCount(len(entries))
-            for row, entry in enumerate(entries):
-                values = (
+            rows = [
+                (
                     entry["date"].strftime("%d/%m/%Y"),
                     entry["description"],
                     format_money(entry["money_in_pence"]),
                     format_money(entry["money_out_pence"]),
                     format_money(entry["running_balance_pence"]),
                 )
-                for column, value in enumerate(values):
-                    item = QTableWidgetItem(value)
-                    if column in (2, 3, 4):
-                        item.setTextAlignment(
-                            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-                        )
-                    self.transaction_table.setItem(row, column, item)
-            self.status.setText(
-                f"Updated {date.today():%d/%m/%Y} · forecast through {projection['end_date']:%d/%m/%Y}"
+                for entry in projection["entries"][:8]
+            ]
+
+            balance_text = (
+                f"{format_money(balance['balance_pence'])}\n"
+                f"Reconciled {balance['baseline_date']:%d/%m/%Y}"
+            )
+            closing_text = (
+                f"{format_money(projection['closing_balance_pence'])}\n"
+                f"By {projection['end_date']:%d/%m/%Y}"
+            )
+            payday_text = pay["date"].strftime("%d %b %Y") if pay else "Not configured"
+            pay_text = format_money(pay["amount_pence"]) if pay else "Not available"
+            savings_text = (
+                f"{format_money(data['savings_total_pence'])}\n"
+                f"{len(goals)} active goal(s)"
+            )
+            debt_text = format_money(data["debt_total_pence"])
+            status_text = (
+                f"Updated {date.today():%d/%m/%Y} · "
+                f"forecast through {projection['end_date']:%d/%m/%Y}"
             )
         except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
-            self.chart.set_points([])
-            self.transaction_table.setRowCount(0)
-            self.status.setText(f"Dashboard could not be loaded: {exc}")
+            # Keep the last displayed data; just report the problem.
+            self.status.setText(f"Dashboard could not be refreshed: {exc}")
+            return
+
+        self.cards["balance"].setText(balance_text)
+        self.cards["closing"].setText(closing_text)
+        self.cards["payday"].setText(payday_text)
+        self.cards["pay"].setText(pay_text)
+        self.cards["savings"].setText(savings_text)
+        self.cards["debt"].setText(debt_text)
+        self.chart.set_points(points)
+
+        self.transaction_table.setRowCount(len(rows))
+        for row, values in enumerate(rows):
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column in (2, 3, 4):
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
+                self.transaction_table.setItem(row, column, item)
+        self.status.setText(status_text)
+
+    def show_refresh_error(self, message: str) -> None:
+        """Report a failed refresh without clearing the last displayed data."""
+        self.status.setText(f"Refresh failed, showing last data: {message}")
