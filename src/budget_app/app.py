@@ -92,6 +92,11 @@ class MainWindow(QMainWindow):
         self.analytics_page = AnalyticsPage()
         self.cashflow_page = CashflowPage()
         cashflow_page = self.cashflow_page
+        dashboard_page.refresh_requested.connect(cashflow_page.refresh_projection)
+        cashflow_page.projection_updated.connect(dashboard_page.refresh_dashboard)
+        cashflow_page.projection_refresh_failed.connect(
+            dashboard_page.show_refresh_error
+        )
         debt_page = DebtPage()
         debt_page.debts_changed.connect(cashflow_page.refresh_projection)
         savings_goals_page = SavingsGoalsPage()

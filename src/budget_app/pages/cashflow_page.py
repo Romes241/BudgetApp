@@ -3,7 +3,7 @@
 from datetime import date
 from typing import ClassVar
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -88,6 +88,9 @@ class SummaryCard(QFrame):
 
 class CashflowPage(QWidget):
     """Display a rolling cashflow projection and transaction ledger."""
+
+    projection_updated = Signal(object)
+    projection_refresh_failed = Signal(str)
 
     HEADERS: ClassVar[list[str]] = [
         "Date",
@@ -245,28 +248,21 @@ class CashflowPage(QWidget):
 
         header = self.transaction_table.horizontalHeader()
         configure_table_header(header)
-        header.setSectionResizeMode(
-            0,
-            QHeaderView.ResizeMode.ResizeToContents,
+        self.transaction_table.verticalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Fixed
         )
-        header.setSectionResizeMode(
-            1,
-            QHeaderView.ResizeMode.Stretch,
-        )
-        header.setSectionResizeMode(
-            2,
-            QHeaderView.ResizeMode.ResizeToContents,
-        )
-        header.setSectionResizeMode(
-            3,
-            QHeaderView.ResizeMode.ResizeToContents,
-        )
-        header.setSectionResizeMode(
-            4,
-            QHeaderView.ResizeMode.ResizeToContents,
-        )
-
-        self.transaction_table.setMinimumHeight(300)
+        self.transaction_table.verticalHeader().setDefaultSectionSize(34)
+        self.transaction_table.setWordWrap(False)
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.transaction_table.setColumnWidth(0, 105)
+        self.transaction_table.setColumnWidth(2, 115)
+        self.transaction_table.setColumnWidth(3, 115)
+        self.transaction_table.setColumnWidth(4, 135)
         self.transaction_table.itemSelectionChanged.connect(
             self._update_forecast_actions
         )
@@ -283,18 +279,25 @@ class CashflowPage(QWidget):
 
         self.refresh_button.setEnabled(False)
         self.refresh_button.setText("Refreshing...")
+        self.refresh_button.repaint()
 
         try:
             self.projection = generate_cashflow_projection()
             self._update_summary()
             self._update_payroll_summary()
-            self._populate_table()
+            self.transaction_table.setUpdatesEnabled(False)
+            self.transaction_table.blockSignals(True)
+            try:
+                self._populate_table()
+            finally:
+                self.transaction_table.blockSignals(False)
+                self.transaction_table.setUpdatesEnabled(True)
             self._populate_actual_transactions()
 
             self.status_label.setText(
                 f"Last updated: {date.today().strftime('%d/%m/%Y')}"
             )
-
+            self.projection_updated.emit(self.projection)
         except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
             self.projection = None
             self.transaction_table.setRowCount(0)
@@ -309,6 +312,7 @@ class CashflowPage(QWidget):
 
             self.date_range_label.setText("Projection unavailable")
             self.status_label.setText("Unable to generate cashflow projection.")
+            self.projection_refresh_failed.emit(str(exc))
 
             QMessageBox.critical(
                 self,
@@ -493,7 +497,6 @@ class CashflowPage(QWidget):
 
                     item.setForeground(QColor("#ffffff"))
 
-        self.transaction_table.resizeRowsToContents()
         self._update_forecast_actions()
 
     def _update_forecast_actions(self) -> None:
