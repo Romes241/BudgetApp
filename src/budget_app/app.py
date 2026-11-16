@@ -121,7 +121,7 @@ class MainWindow(QMainWindow):
         settings_page.data_restored.connect(income_page.refresh_income)
         settings_page.data_restored.connect(self.analytics_page.refresh_analytics)
         self.simulator_page = SimulatorPage()
-        settings_page.data_restored.connect(self.simulator_page.refresh_projection)
+        settings_page.data_restored.connect(self.simulator_page.reset_scenario)
 
         self.page_stack.addWidget(dashboard_page)
         self.page_stack.addWidget(self.analytics_page)
