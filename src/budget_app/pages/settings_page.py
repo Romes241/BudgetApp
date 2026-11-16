@@ -1,6 +1,7 @@
 """Application settings page."""
 
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QDate, Qt, Signal
@@ -9,6 +10,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from budget_app.services.backup_service import create_backup, restore_backup
 from budget_app.services.settings_service import (
     get_pension_estimate,
     get_settings,
@@ -35,6 +38,7 @@ class SettingsPage(QWidget):
     """View and update the settings used by BudgetApp."""
 
     settings_saved = Signal()
+    data_restored = Signal()
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -126,6 +130,7 @@ class SettingsPage(QWidget):
         self._build_balance_card(content_layout)
         self._build_income_card(content_layout)
         self._build_tax_card(content_layout)
+        self._build_backup_card(content_layout)
 
         content_layout.setColumnStretch(0, 1)
         content_layout.setColumnStretch(1, 1)
@@ -154,6 +159,100 @@ class SettingsPage(QWidget):
         footer_layout.addWidget(self.save_button)
 
         main_layout.addLayout(footer_layout)
+
+    def _build_backup_card(self, grid: QGridLayout) -> None:
+        card, layout = self._create_card(
+            "Backup and restore",
+            "Back up saved BudgetApp data or restore it later. Save Settings "
+            "changes before creating a backup. Restoring replaces current data "
+            "after creating a safety backup.",
+        )
+
+        actions = QHBoxLayout()
+        self.create_backup_button = QPushButton("Create backup")
+        self.create_backup_button.clicked.connect(self.create_data_backup)
+        actions.addWidget(self.create_backup_button)
+
+        self.restore_backup_button = QPushButton("Restore backup")
+        self.restore_backup_button.clicked.connect(self.restore_data_backup)
+        actions.addWidget(self.restore_backup_button)
+        actions.addStretch()
+        layout.addLayout(actions)
+
+        self.backup_status_label = QLabel("")
+        self.backup_status_label.setObjectName("secondaryText")
+        self.backup_status_label.setWordWrap(True)
+        layout.addWidget(self.backup_status_label)
+
+        grid.addWidget(card, 2, 0, 1, 2)
+
+    def create_data_backup(self) -> None:
+        """Save the current BudgetApp database to a user-selected file."""
+
+        backup_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Create BudgetApp backup",
+            "BudgetApp-backup.db",
+            "BudgetApp backups (*.db)",
+        )
+        if not backup_path:
+            return
+        if not Path(backup_path).suffix:
+            backup_path = f"{backup_path}.db"
+
+        try:
+            saved_path = create_backup(backup_path)
+        except (ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
+            self.backup_status_label.setText("Backup could not be created.")
+            QMessageBox.critical(
+                self,
+                "Backup error",
+                f"Could not create a BudgetApp backup:\n\n{exc}",
+            )
+            return
+
+        self.backup_status_label.setText(f"Backup created: {saved_path}")
+
+    def restore_data_backup(self) -> None:
+        """Restore a selected backup after explicit confirmation."""
+
+        backup_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Restore BudgetApp backup",
+            "",
+            "BudgetApp backups (*.db)",
+        )
+        if not backup_path:
+            return
+
+        confirmation = QMessageBox.question(
+            self,
+            "Replace current BudgetApp data?",
+            "Restoring this backup will replace your current BudgetApp data. "
+            "A safety backup of the current data will be created first, and "
+            "any unsaved Settings changes will be lost.\n\nContinue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirmation != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            safety_backup = restore_backup(backup_path)
+        except (ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
+            self.backup_status_label.setText("Backup could not be restored.")
+            QMessageBox.critical(
+                self,
+                "Restore error",
+                f"Could not restore the selected backup:\n\n{exc}",
+            )
+            return
+
+        self.refresh_settings()
+        self.backup_status_label.setText(
+            f"Backup restored. Safety backup created at: {safety_backup}"
+        )
+        self.data_restored.emit()
 
     def _build_balance_card(self, grid: QGridLayout) -> None:
         card, layout = self._create_card(

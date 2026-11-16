@@ -13,6 +13,7 @@ A personal finance desktop application built with Python, PySide6 and SQLite.
 - Savings goals and contribution tracking
 - Financial analytics for recorded income, deductions, planned commitments and savings progress
 - What-if payroll scenarios using temporary pay and spending assumptions
+- SQLite data backups and restore, with an automatic safety backup before restoring
 
 ## Technology Stack
 
