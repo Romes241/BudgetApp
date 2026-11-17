@@ -39,3 +39,4 @@ exports/
 
 # Packaging output
 *.spec
+!packaging/BudgetApp.spec

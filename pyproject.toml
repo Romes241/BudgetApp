@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "budgetapp"
-version = "0.1.0"
+version = "1.0.0"
 description = "A personal finance and budgeting desktop application."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -20,6 +20,9 @@ dependencies = [
 dev = [
     "pytest>=8.0,<10",
 ]
+build = [
+    "pyinstaller>=6.22,<7",
+]
 
 [project.scripts]
 budgetapp = "budget_app.app:main"
@@ -28,7 +31,7 @@ budgetapp = "budget_app.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-budget_app = ["styles/theme.qss", "styles/*.svg"]
+budget_app = ["styles/theme.qss", "styles/*.svg", "assets/*.ico"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

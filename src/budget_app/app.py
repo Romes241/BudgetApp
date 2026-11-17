@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -37,7 +38,9 @@ def load_stylesheet() -> str:
     """Load the application's Qt stylesheet."""
 
     stylesheet_path = Path(__file__).parent / "styles" / "theme.qss"
-    return stylesheet_path.read_text(encoding="utf-8")
+    checkbox_icon = stylesheet_path.parent / "checkbox.svg"
+    stylesheet = stylesheet_path.read_text(encoding="utf-8")
+    return stylesheet.replace("__CHECKBOX_CHECK_ICON__", checkbox_icon.as_uri())
 
 
 class MainWindow(QMainWindow):
@@ -261,6 +264,7 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName("BudgetApp")
     app.setOrganizationName("BudgetApp")
+    app.setWindowIcon(QIcon(str(Path(__file__).parent / "assets" / "BudgetApp.ico")))
     app.setStyleSheet(load_stylesheet())
 
     window = MainWindow()
