@@ -136,6 +136,45 @@ def get_settings() -> dict:
     return settings
 
 
+def update_reconciled_balance(
+    *,
+    current_balance: Any,
+    balance_as_of_date: str | date,
+) -> None:
+    """Update only the reconciled balance without replacing other settings."""
+
+    balance_pence = _validate_current_balance(current_balance)
+    validated_date = _validate_balance_date(balance_as_of_date)
+
+    with database_connection() as connection:
+        existing_balance = connection.execute(
+            """SELECT current_balance_pence, balance_as_of_date,
+                balance_reconciled_at FROM settings WHERE id = 1"""
+        ).fetchone()
+        if existing_balance is None:
+            raise RuntimeError("BudgetApp settings have not been initialised.")
+
+        if (
+            int(existing_balance["current_balance_pence"]) == balance_pence
+            and existing_balance["balance_as_of_date"] == validated_date
+        ):
+            reconciled_at = existing_balance["balance_reconciled_at"]
+        else:
+            reconciled_at = (
+                datetime.now(UTC)
+                .isoformat(timespec="milliseconds")
+                .replace("+00:00", "Z")
+            )
+
+        connection.execute(
+            """UPDATE settings
+            SET current_balance_pence = ?, balance_as_of_date = ?,
+                balance_reconciled_at = ?
+            WHERE id = 1""",
+            (balance_pence, validated_date, reconciled_at),
+        )
+
+
 def get_pension_estimate(as_of_date: date | None = None) -> dict | None:
     """Estimate the effective pension deduction rate from recent income history.
 

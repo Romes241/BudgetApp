@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from budget_app.pages.balance_update_dialog import prompt_update_balance
 from budget_app.services.balance_service import (
     add_actual_transaction,
     delete_actual_transaction,
@@ -155,6 +156,11 @@ class CashflowPage(QWidget):
         self.refresh_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.refresh_button.clicked.connect(self.refresh_projection)
 
+        self.update_balance_button = QPushButton("Update balance")
+        self.update_balance_button.setObjectName("smallButton")
+        self.update_balance_button.clicked.connect(self.update_balance)
+
+        heading_layout.addWidget(self.update_balance_button)
         heading_layout.addWidget(self.refresh_button)
 
         main_layout.addLayout(heading_layout)
@@ -273,6 +279,12 @@ class CashflowPage(QWidget):
         self.status_label = QLabel("")
         self.status_label.setObjectName("secondaryText")
         main_layout.addWidget(self.status_label)
+
+    def update_balance(self) -> None:
+        """Update the saved balance and refresh cashflow and dashboard data."""
+
+        if prompt_update_balance(self):
+            self.refresh_projection()
 
     def refresh_projection(self) -> None:
         """Generate a fresh projection and update the page."""

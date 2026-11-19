@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from budget_app.pages.balance_update_dialog import prompt_update_balance
 from budget_app.services.dashboard_service import get_dashboard_data
 from budget_app.utils.money import format_money
 from budget_app.utils.table import configure_table_header
@@ -120,6 +121,12 @@ class DashboardPage(QWidget):
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setObjectName("primaryButton")
         self.refresh_button.clicked.connect(lambda: self.refresh_requested.emit())
+
+        self.update_balance_button = QPushButton("Update balance")
+        self.update_balance_button.setObjectName("smallButton")
+        self.update_balance_button.clicked.connect(self.update_balance)
+
+        title_row.addWidget(self.update_balance_button)
         title_row.addWidget(self.refresh_button)
         layout.addLayout(title_row)
 
@@ -285,3 +292,10 @@ class DashboardPage(QWidget):
     def show_refresh_error(self, message: str) -> None:
         """Report a failed refresh without clearing the last displayed data."""
         self.status.setText(f"Refresh failed, showing last data: {message}")
+
+    def update_balance(self) -> None:
+        """Update the saved balance and request a fresh cashflow projection."""
+
+        if prompt_update_balance(self):
+            self.status.setText("Reconciled balance updated.")
+            self.refresh_requested.emit()
